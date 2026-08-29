@@ -135,10 +135,13 @@ export default function ReadinessPage() {
                       <span className="text-xs text-[#94a3b8] pb-1">/ 100</span>
                     </div>
                     <div className="w-full bg-[#1f2937] rounded-full h-2">
-                      <div className={cn(
-                        "h-2 rounded-full",
-                        dim.score >= 85 ? "bg-[#10b981]" : dim.score >= 70 ? "bg-[#3b82f6]" : "bg-[#f59e0b]"
-                      )}" style={{ width: `${dim.score}%` }}></div>
+                      <div
+                        className={cn(
+                          "h-2 rounded-full",
+                          dim.score >= 85 ? "bg-[#10b981]" : dim.score >= 70 ? "bg-[#3b82f6]" : "bg-[#f59e0b]"
+                        )}
+                        style={{ width: `${dim.score}%` }}
+                      ></div>
                     </div>
                     <div className="text-[10px] text-[#6b7280] mt-2">Weight: {dim.weight}</div>
                   </div>
