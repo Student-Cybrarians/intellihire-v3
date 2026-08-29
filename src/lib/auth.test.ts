@@ -1,9 +1,10 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import {
   createToken,
   verifyToken,
   hashPassword,
   comparePassword,
+  setJwtSecret,
   SESSION_COOKIE_NAME,
 } from "./auth";
 import type { SessionPayload } from "./auth";
@@ -14,6 +15,14 @@ const payload: SessionPayload = {
   name: "Ada Lovelace",
   role: "candidate",
 };
+
+/**
+ * `src/lib/auth.ts` fails closed without a `JWT_SECRET`. Set a test-only secret
+ * on the auth module before any signing/verification.
+ */
+beforeEach(() => {
+  setJwtSecret("test-secret-0123456789abcdef-test-secret");
+});
 
 afterEach(() => {
   vi.useRealTimers();
@@ -46,12 +55,12 @@ describe("auth token signing & verification", () => {
     vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
 
     const token = createToken(payload);
-    // Valid within the 7d window.
-    vi.setSystemTime(new Date("2026-01-06T00:00:00Z"));
+    // Valid within the 24h window.
+    vi.setSystemTime(new Date("2026-01-01T23:00:00Z"));
     expect(verifyToken(token)).toMatchObject(payload);
 
-    // Beyond 7d -> expired.
-    vi.setSystemTime(new Date("2026-01-10T00:00:00Z"));
+    // Beyond 24h -> expired.
+    vi.setSystemTime(new Date("2026-01-02T01:00:00Z"));
     expect(verifyToken(token)).toBeNull();
   });
 

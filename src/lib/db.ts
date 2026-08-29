@@ -32,6 +32,17 @@ export interface DbEnv {
   DB?: D1Database;
 }
 
+/**
+ * Minimal shape of the `SESSION_STORE` KV binding. Matches Cloudflare's
+ * `KVNamespace` for the methods this app uses; typed structurally to avoid
+ * importing `@cloudflare/workers-types` (see note above).
+ */
+export interface KvStore {
+  get(key: string, type?: "text"): Promise<string | null>;
+  put(key: string, value: string, options?: { expirationTtl?: number }): Promise<void>;
+  delete(key: string): Promise<void>;
+}
+
 export interface UserRecord {
   id: string;
   email: string;
@@ -195,9 +206,22 @@ export interface StorageDriver {
   saveActivity(activity: ActivityRecord): Promise<void>;
 }
 
-/** Deterministic id generation shared by the service and drivers. */
+/**
+ * Id generation shared by the service and drivers.
+ *
+ * Prefers a cryptographically random UUID (Node 20 / Workers) so ids cannot be
+ * guessed or enumerated. Falls back to a time+random id only if the platform
+ * lacks `crypto.randomUUID`.
+ */
 export function generateId(prefix: string): string {
-  return `${prefix}_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    try {
+      return `${prefix}_${crypto.randomUUID()}`;
+    } catch {
+      // fall through to the non-crypto fallback below
+    }
+  }
+  return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -805,6 +829,18 @@ function mapHRInterview(row: HRInterviewRow): HRInterviewSession {
 // DatabaseService (higher-level orchestration shared by both drivers)
 // ---------------------------------------------------------------------------
 
+/** Editable columns on a user's own career context record (whitelisted updates). */
+const CAREER_CONTEXT_UPDATABLE_FIELDS = [
+  "targetRole",
+  "targetIndustry",
+  "seniorityLevel",
+  "skills",
+  "readinessScore",
+  "atsScore",
+  "assessmentScore",
+  "interviewScore",
+] as const;
+
 export class DatabaseService {
   constructor(private driver: StorageDriver) {}
 
@@ -870,21 +906,35 @@ export class DatabaseService {
 
   async updateCareerContext(userId: string, data: Partial<CareerContextRecord>): Promise<CareerContextRecord> {
     const current = await this.driver.getCareerContext(userId);
+    const base: CareerContextRecord = current || {
+      id: generateId("ctx"),
+      userId,
+      targetRole: "Software Engineer",
+      targetIndustry: "Technology",
+      seniorityLevel: "Mid-Level",
+      skills: [],
+      readinessScore: 70,
+      atsScore: 70,
+      assessmentScore: 70,
+      interviewScore: 70,
+      updatedAt: new Date().toISOString(),
+    };
+
+    // Whitelist: a caller may only update their own context's editable columns.
+    // Identity fields (`id`, `userId`, `updatedAt`) are never taken from `data`,
+    // so a request can never write across users or forge the record id.
+    const patch: Partial<CareerContextRecord> = {};
+    for (const field of CAREER_CONTEXT_UPDATABLE_FIELDS) {
+      const value = data[field];
+      if (value !== undefined) {
+        (patch as Record<string, unknown>)[field] = value;
+      }
+    }
+
     const updated: CareerContextRecord = {
-      ...(current || {
-        id: generateId("ctx"),
-        userId,
-        targetRole: "Software Engineer",
-        targetIndustry: "Technology",
-        seniorityLevel: "Mid-Level",
-        skills: [],
-        readinessScore: 70,
-        atsScore: 70,
-        assessmentScore: 70,
-        interviewScore: 70,
-        updatedAt: new Date().toISOString(),
-      }),
-      ...data,
+      ...base,
+      ...patch,
+      userId,
       updatedAt: new Date().toISOString(),
     };
     await this.driver.upsertCareerContext(updated);
@@ -1043,14 +1093,24 @@ export class DatabaseService {
  */
 const CLOUDFLARE_REQUEST_CONTEXT = Symbol.for("__cloudflare-request-context__");
 
+/**
+ * Cloudflare `env` shape consumed by the app. Backs the database (D1), the
+ * session/rate-limit store (KV) and secret bindings such as `JWT_SECRET`.
+ */
+export interface CloudflareEnv {
+  DB?: D1Database;
+  SESSION_STORE?: KvStore;
+  JWT_SECRET?: string;
+}
+
 interface CloudflareRequestContext {
-  env?: DbEnv;
+  env?: CloudflareEnv;
   cf?: unknown;
   ctx?: unknown;
 }
 
 /** Resolve the current request's Cloudflare `env`, or `undefined` in local dev. */
-function currentCloudflareEnv(): DbEnv | undefined {
+export function currentCloudflareEnv(): CloudflareEnv | undefined {
   try {
     const ctx = (globalThis as Record<symbol, unknown>)[CLOUDFLARE_REQUEST_CONTEXT] as
       | CloudflareRequestContext
@@ -1059,6 +1119,15 @@ function currentCloudflareEnv(): DbEnv | undefined {
   } catch {
     return undefined;
   }
+}
+
+/**
+ * Resolve the current request's KV binding (`SESSION_STORE`) using the same
+ * request-context accessor pattern as the database layer. Returns `undefined`
+ * in local dev / tests, where callers use an in-memory fallback.
+ */
+export function requestKv(): KvStore | undefined {
+  return currentCloudflareEnv()?.SESSION_STORE;
 }
 
 /**

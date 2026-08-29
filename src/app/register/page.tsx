@@ -123,7 +123,7 @@ export default function RegisterPage() {
                 "focus:outline-none focus:ring-2 focus:ring-[#3b82f6] focus:border-transparent",
                 "text-[#f8fafc] placeholder-[#6b7280] transition-colors"
               )}
-              placeholder="Minimum 6 characters"
+              placeholder="Minimum 8 characters"
             />
           </div>
 

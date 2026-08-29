@@ -1,8 +1,22 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { requestDb } from "@/lib/db";
+import type { AssessmentTest } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * Strip the answer key (`correctIndex`, `explanation`) before serving questions
+ * to the client. Grading happens server-side in `/api/assessment/submit`, so a
+ * client never needs the correct answers; exposing them would let a user score
+ * 100% without any skill.
+ */
+function stripAnswerKey(test: AssessmentTest) {
+  return {
+    ...test,
+    questions: test.questions.map(({ correctIndex: _correctIndex, explanation: _explanation, ...rest }) => rest),
+  };
+}
 
 export async function GET() {
   try {
@@ -16,7 +30,7 @@ export async function GET() {
     const results = await db.getAssessmentResults(user.id);
 
     return NextResponse.json({
-      tests,
+      tests: tests.map(stripAnswerKey),
       results,
     });
   } catch (error) {
