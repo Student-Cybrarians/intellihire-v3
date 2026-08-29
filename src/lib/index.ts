@@ -22,6 +22,8 @@ export {
   MemoryDriver,
   D1Driver,
 } from "./db";
+export { askAI, isFallback, AI_FALLBACK_PREFIX } from "./ai";
+export type { AskAIInput } from "./ai";
 export type {
   UserRecord,
   CareerContextRecord,

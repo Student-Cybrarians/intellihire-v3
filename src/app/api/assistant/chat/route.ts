@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { requestDb } from "@/lib/db";
+import { askAI } from "@/lib/ai";
 import { z } from "zod";
 
 export const dynamic = "force-dynamic";
@@ -24,19 +25,34 @@ export async function POST(req: Request) {
 
     const { message } = parsed.data;
 
-    // Get user context for AI response
+    // Get user context for AI response (authorized retrieved data).
     const context = await db.getCareerContext(user.id);
     const roadmap = await db.getRoadmap(user.id);
     const techInterviews = await db.getTechInterviews(user.id);
     const hrInterviews = await db.getHRInterviews(user.id);
     const assessments = await db.getAssessmentResults(user.id);
 
-    // Generate AI response based on context
     const contextSummary = `Target: ${context?.targetRole || "Software Engineer"}, Industry: ${context?.targetIndustry || "Technology"}, Seniority: ${context?.seniorityLevel || "Mid-Level"}, Skills: ${context?.skills?.join(", ") || "General"}\n\nReadiness Score: ${context?.readinessScore || "N/A"}% | ATS: ${context?.atsScore || "N/A"}% | Assessment: ${context?.assessmentScore || "N/A"}% | Interview: ${context?.interviewScore || "N/A"}%`;
+
+    // AI boundary: retrieved/authorized data goes into the SYSTEM turn; the
+    // user's raw message goes into the USER turn. Never interpolate user
+    // content into the system prompt (treat uploaded content as data).
+    const systemPrompt = buildSystemPrompt(contextSummary, {
+      roadmap,
+      techInterviews,
+      hrInterviews,
+      assessments,
+    });
+
+    const content = await askAI({
+      system: systemPrompt,
+      user: message,
+      maxTokens: 600,
+    });
 
     const response = {
       role: "assistant",
-      content: generateAIResponse(message, contextSummary, techInterviews, hrInterviews, roadmap, assessments),
+      content,
       context: contextSummary,
     };
 
@@ -54,55 +70,62 @@ export async function POST(req: Request) {
   }
 }
 
-function generateAIResponse(
-  message: string,
-  context: string,
-  techInterviews: any[],
-  hrInterviews: any[],
-  roadmap: any[],
-  assessments: any[]
+function buildSystemPrompt(
+  contextSummary: string,
+  history: {
+    roadmap: any[];
+    techInterviews: any[];
+    hrInterviews: any[];
+    assessments: any[];
+  }
 ): string {
-  const lowerMsg = message.toLowerCase();
+  const { roadmap, techInterviews, hrInterviews, assessments } = history;
 
-  if (lowerMsg.includes("roadmap") || lowerMsg.includes("path")) {
-    const pending = roadmap.filter(m => m.status !== "completed").slice(0, 3);
-    if (pending.length > 0) {
-      return `Based on your career roadmap, here are your next milestones:\n\n${pending.map((m: any, i: number) => `${i + 1}. ${m.title} (${m.category}) - ${m.status}`).join("\n")}\n\nFocus on closing these gaps to accelerate your readiness score.`
-    }
-    return "Your roadmap is progressing well! All major milestones are complete or in progress."
-  }
+  const pendingMilestones = roadmap
+    .filter((m) => m.status !== "completed")
+    .slice(0, 6)
+    .map((m) => `- ${m.title} (${m.category}, ${m.status})`)
+    .join("\n") || "None pending.";
 
-  if (lowerMsg.includes("strength") || lowerMsg.includes("weakness") || lowerMsg.includes("gap")) {
-    return `Based on your interview and assessment history:\n\n**Strengths**:\n- High ATS match (92%) for Cloud & AI Platform roles\n- Strong behavioral STAR structure\n- Demonstrated leadership in architectural alignment\n\n**Improvement Gaps**:\n- Add explicit performance profiling telemetry benchmarks\n- Quantify business impact metrics in behavioral answers\n- Consider adding GraphQL Federation or Kubernetes Operator skills for top-tier roles`
-  }
+  const latestTech = techInterviews[0];
+  const techSummary = latestTech
+    ? `- ${latestTech.title} — score ${latestTech.score}% (correctness ${latestTech.feedback?.correctness}%, code quality ${latestTech.feedback?.codeQuality}%, efficiency ${latestTech.feedback?.efficiency}%)`
+    : "None recorded yet.";
 
-  if (lowerMsg.includes("interview") || lowerMsg.includes("tech")) {
-    const lastTech = techInterviews[0];
-    if (lastTech) {
-      return `Your most recent technical interview (LRU Cache Implementation):\n- Overall Score: ${lastTech.score}%\n- Correctness: ${lastTech.feedback?.correctness}%\n- Code Quality: ${lastTech.feedback?.codeQuality}%\n- Efficiency: ${lastTech.feedback?.efficiency}%\n\n${lastTech.feedback?.notes || ""}`
-    }
-    return "You haven't completed any technical interviews yet. Try the Technical Interview Simulator to get started."
-  }
+  const latestHr = hrInterviews[0];
+  const hrSummary = latestHr
+    ? `- ${latestHr.category} — STAR ${latestHr.feedback?.starScore}%, communication ${latestHr.feedback?.communicationScore}%, leadership ${latestHr.feedback?.leadershipScore}%`
+    : "None recorded yet.";
 
-  if (lowerMsg.includes("hr") || lowerMsg.includes("behavioral")) {
-    const lastHr = hrInterviews[0];
-    if (lastHr) {
-      return `Your most recent behavioral interview:\n- Category: ${lastHr.category}\n- STAR Score: ${lastHr.feedback?.starScore}%\n- Communication: ${lastHr.feedback?.communicationScore}%\n- Leadership: ${lastHr.feedback?.leadershipScore}%\n\n${lastHr.feedback?.critique || ""}`
-    }
-    return "You haven't completed any HR interviews yet. Use the Behavioral Interview Simulator to practice STAR-based responses."
-  }
+  const latestAssessment = assessments[0];
+  const assessmentSummary = latestAssessment
+    ? `- ${latestAssessment.testTitle} (${latestAssessment.skill}) — ${latestAssessment.score}% (${latestAssessment.correctCount}/${latestAssessment.totalQuestions}), level ${latestAssessment.levelReached}`
+    : "None recorded yet.";
 
-  if (lowerMsg.includes("assessment") || lowerMsg.includes("test")) {
-    const lastAssessment = assessments[0];
-    if (lastAssessment) {
-      return `Your most recent assessment result:\n- Test: ${lastAssessment.testTitle}\n- Skill: ${lastAssessment.skill}\n- Score: ${lastAssessment.score}% (${lastAssessment.correctCount}/${lastAssessment.totalQuestions})\n- Level: ${lastAssessment.levelReached}`
-    }
-    return "You haven't completed any assessments yet. Try the Adaptive Assessment Module to get started."
-  }
-
-  if (lowerMsg.includes("readiness") || lowerMsg.includes("score")) {
-    return `Your overall career readiness score is **${context.match(/Readiness Score: (\d+)%/)?.[1] || "N/A"}%**.\n\nBreakdown:\n- ATS Resume: ${context.match(/ATS: (\d+)%/)?.[1] || "N/A"}%\n- Assessment: ${context.match(/Assessment: (\d+)%/)?.[1] || "N/A"}%\n- Technical Interview: ${context.match(/Interview: (\d+)%/)?.[1] || "N/A"}%\n\nYou are in the **Top 8%** of candidates for your target role.`
-  }
-
-  return `Based on your IntelliHire profile:\n\n${context}\n\nHow can I help you with your career preparation? I can assist with:\n- Roadmap and milestone planning\n- Strength/weakness analysis\n- Interview preparation tips\n- Assessment recommendations`
+  return [
+    "You are IntelliHire, a grounded career coach helping a candidate prepare for job interviews and career growth.",
+    "",
+    "You have access ONLY to the AUTHORIZED user context below (retrieved server-side from the user's own profile).",
+    "",
+    "CONTEXT:",
+    contextSummary,
+    "",
+    "ROADMAP MILESTONES (pending):",
+    pendingMilestones,
+    "",
+    "RECENT TECHNICAL INTERVIEW:",
+    techSummary,
+    "",
+    "RECENT BEHAVIORAL INTERVIEW:",
+    hrSummary,
+    "",
+    "RECENT ASSESSMENT:",
+    assessmentSummary,
+    "",
+    "RULES:",
+    "- Answer ONLY from the provided context plus general, well-known career and interview knowledge.",
+    "- NEVER invent user-specific facts, scores, milestones, companies, or experiences. If the context does not contain something, say you don't have that information and suggest how they can add it.",
+    "- Be concise, encouraging, and practical. Use short sections and bullet points when helpful.",
+    "- Do not expose or echo other users' data.",
+  ].join("\n");
 }
