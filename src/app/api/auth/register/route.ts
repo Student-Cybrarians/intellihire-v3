@@ -1,17 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { comparePassword, createToken, SESSION_COOKIE_NAME } from "@/lib/auth";
+import { hashPassword, createToken, SESSION_COOKIE_NAME } from "@/lib/auth";
 
-const loginSchema = z.object({
+const registerSchema = z.object({
+  name: z.string().min(2, "Name must be at least 2 characters"),
   email: z.string().email("Invalid email address"),
-  password: z.string().min(1, "Password is required"),
+  password: z.string().min(6, "Password must be at least 6 characters"),
+  role: z.enum(["candidate", "recruiter", "admin"]).default("candidate"),
 });
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const result = loginSchema.safeParse(body);
+    const result = registerSchema.safeParse(body);
 
     if (!result.success) {
       return NextResponse.json(
@@ -20,25 +22,25 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { email, password } = result.data;
+    const { name, email, password, role } = result.data;
 
-    // Find user by email
-    const user = await db.findUserByEmail(email);
-    if (!user) {
+    // Check if user already exists
+    const existing = await db.findUserByEmail(email);
+    if (existing) {
       return NextResponse.json(
-        { error: "Invalid email or password" },
-        { status: 401 }
+        { error: "An account with this email already exists" },
+        { status: 409 }
       );
     }
 
-    // Verify password
-    const valid = await comparePassword(password, user.passwordHash);
-    if (!valid) {
-      return NextResponse.json(
-        { error: "Invalid email or password" },
-        { status: 401 }
-      );
-    }
+    // Hash password and store user
+    const passwordHash = await hashPassword(password);
+    const user = await db.createUser({
+      name,
+      email,
+      passwordHash,
+      role,
+    });
 
     // Create session token
     const token = createToken({
@@ -63,15 +65,15 @@ export async function POST(req: NextRequest) {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
-      maxAge: 7 * 24 * 60 * 60,
+      maxAge: 7 * 24 * 60 * 60, // 7 days
       path: "/",
     });
 
     return response;
   } catch (error: any) {
-    console.error("Login error:", error);
+    console.error("Registration error:", error);
     return NextResponse.json(
-      { error: "Internal server error during login" },
+      { error: "Internal server error during registration" },
       { status: 500 }
     );
   }

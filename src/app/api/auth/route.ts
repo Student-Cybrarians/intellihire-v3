@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getSession, createToken, comparePassword, SESSION_COOKIE_NAME } from "@/lib/auth";
+import { db } from "@/lib/db";
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
-    const { requireAuth } = await import("@/lib/auth");
-    const result = requireAuth();
-
-    if (result.error) {
-      return NextResponse.json({ error: result.error }, { status: result.status });
+    const session = await getSession();
+    if (!session) {
+      return NextResponse.json({ authenticated: false }, { status: 401 });
     }
 
-    return NextResponse.json({ session: result.session }, { status: 200 });
+    return NextResponse.json({ authenticated: true, session }, { status: 200 });
   } catch (e) {
     console.error("Session error:", e);
     return NextResponse.json(
@@ -21,8 +21,6 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const { createSession } = await import("@/lib/auth");
-
     const body = await request.json();
     const { email, password } = body;
 
@@ -33,33 +31,42 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Mock auth - in production, verify against database
-    if (email === "test@example.com" && password === "password123") {
-      const token = await createSession({
-        userId: "user-001",
-        email,
-        role: "candidate",
-      });
-
-      const response = NextResponse.json(
-        { success: true, message: "Login successful" },
-        { status: 200 }
+    const user = await db.findUserByEmail(email);
+    if (!user) {
+      return NextResponse.json(
+        { error: "Invalid credentials" },
+        { status: 401 }
       );
-
-      response.cookies.set("session", token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        maxAge: 7 * 24 * 60 * 60,
-        path: "/",
-      });
-
-      return response;
     }
 
-    return NextResponse.json(
-      { error: "Invalid credentials" },
-      { status: 401 }
+    const valid = await comparePassword(password, user.passwordHash);
+    if (!valid) {
+      return NextResponse.json(
+        { error: "Invalid credentials" },
+        { status: 401 }
+      );
+    }
+
+    const token = createToken({
+      userId: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+    });
+
+    const response = NextResponse.json(
+      { success: true, user: { id: user.id, name: user.name, email: user.email, role: user.role } },
+      { status: 200 }
     );
+
+    response.cookies.set(SESSION_COOKIE_NAME, token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      maxAge: 7 * 24 * 60 * 60,
+      path: "/",
+    });
+
+    return response;
   } catch (e) {
     console.error("Login error:", e);
     return NextResponse.json(
@@ -69,14 +76,14 @@ export async function POST(request: NextRequest) {
   }
 }
 
-export async function DELETE(request: NextRequest) {
+export async function DELETE() {
   try {
     const response = NextResponse.json(
       { success: true, message: "Logged out" },
       { status: 200 }
     );
 
-    response.cookies.delete("session", { path: "/" });
+    response.cookies.delete(SESSION_COOKIE_NAME);
 
     return response;
   } catch (e) {
