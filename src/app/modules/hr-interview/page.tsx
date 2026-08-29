@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { ArrowLeft, MessageSquare, Award, CheckCircle2, Sparkles, Send, RefreshCw, Users } from "lucide-react";
+import { ArrowLeft, Award, Send, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface HRInterview {
@@ -35,7 +35,7 @@ const HR_SCENARIOS = [
 ];
 
 export default function HRInterviewPage() {
-  const [interviews, setInterviews] = useState<HRInterview[]>([]);
+  const [_interviews, setInterviews] = useState<HRInterview[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedScenario, setSelectedScenario] = useState(HR_SCENARIOS[0]);
   const [response, setResponse] = useState("");

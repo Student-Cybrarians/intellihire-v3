@@ -7,7 +7,7 @@ compatibility_flags = ["nodejs_compat"]
 [[d1_databases]]
 binding = "DB"
 database_name = "intellihire_db"
-database_id = "placeholder-d1-id"
+database_id = "a73d035b-1328-4eee-8e94-91db4c78f0f2"
 
 # R2 Object Storage
 [[r2_buckets]]
@@ -17,7 +17,7 @@ bucket_name = "intellihire-uploads"
 # KV Namespaces
 [[kv_namespaces]]
 binding = "SESSION_STORE"
-id = "placeholder-kv-id"
+id = "2fb07ec6e55048d4880d24dd9e4b6c8f"
 
 # Workers AI
 [ai]

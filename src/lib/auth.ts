@@ -1,7 +1,8 @@
 import { cookies } from "next/headers";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
-import { db, UserRecord } from "./db";
+import { requestDb } from "./db";
+import type { UserRecord } from "./db";
 
 const JWT_SECRET = process.env.JWT_SECRET || "intellihire-jwt-secret-key-32-chars-long";
 const JWT_EXPIRES_IN = "7d";
@@ -20,10 +21,6 @@ export async function hashPassword(password: string): Promise<string> {
 }
 
 export async function comparePassword(password: string, hash: string): Promise<boolean> {
-  // Allow demo fallback for pre-seeded user if hash doesn't match
-  if (password === "password123" && hash.startsWith("$2a$10$wE1Vp2e7O8KkL6sZg8")) {
-    return true;
-  }
   return bcrypt.compare(password, hash);
 }
 
@@ -35,7 +32,7 @@ export function verifyToken(token: string): SessionPayload | null {
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as SessionPayload;
     return decoded;
-  } catch (error) {
+  } catch {
     return null;
   }
 }
@@ -50,7 +47,7 @@ export async function getSession(): Promise<SessionPayload | null> {
 export async function getCurrentUser(): Promise<UserRecord | null> {
   const session = await getSession();
   if (!session) return null;
-  return db.findUserById(session.userId);
+  return requestDb().findUserById(session.userId);
 }
 
 export async function requireAuth(): Promise<{ session?: SessionPayload; error?: string; status: number }> {

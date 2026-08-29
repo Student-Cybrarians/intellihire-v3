@@ -11,3 +11,6 @@ yarn-error.log*
 .env*.local
 .claude-secrets.env
 .env
+tsconfig.tsbuildinfo
+/.wrangler/
+.dev.vars

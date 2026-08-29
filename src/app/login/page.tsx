@@ -76,7 +76,7 @@ function LoginForm() {
               "focus:outline-none focus:ring-2 focus:ring-[#3b82f6] focus:border-transparent",
               "text-[#f8fafc] placeholder-[#6b7280] transition-colors"
             )}
-            placeholder="demo@intellihire.dev"
+            placeholder="you@example.com"
           />
         </div>
 
@@ -125,12 +125,6 @@ function LoginForm() {
           Create one
         </Link>
       </p>
-
-      <div className="mt-6 p-4 rounded-md bg-[#111827] border border-[#1f2937] text-sm text-[#94a3b8]">
-        <p className="font-medium text-[#f8fafc]">Demo credentials:</p>
-        <p>Email: demo@intellihire.dev</p>
-        <p>Password: password123</p>
-      </div>
     </div>
   );
 }

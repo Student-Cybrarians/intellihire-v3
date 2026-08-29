@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { ArrowLeft, Award, BarChart3, TrendingUp, ShieldCheck, ChevronRight, Users, CheckCircle2, Sparkles } from "lucide-react";
+import { ArrowLeft, Award, BarChart3, TrendingUp, ShieldCheck, Users, CheckCircle2, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ReadinessReport {

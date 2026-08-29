@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { ArrowLeft, Code, Play, CheckCircle2, Award, Terminal, RefreshCw, Cpu, Layers, Check } from "lucide-react";
+import { ArrowLeft, Code, Play, Award, Terminal, Cpu } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface TechInterview {
@@ -41,7 +41,7 @@ const PROBLEMS = [
 ];
 
 export default function TechInterviewPage() {
-  const [interviews, setInterviews] = useState<TechInterview[]>([]);
+  const [_interviews, setInterviews] = useState<TechInterview[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedProblem, setSelectedProblem] = useState(PROBLEMS[0]);
   const [code, setCode] = useState(PROBLEMS[0].starterCode);

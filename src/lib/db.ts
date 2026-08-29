@@ -1,11 +1,43 @@
-// Database client and persistence layer for D1 & local development
+// Database client and persistence layer for D1 (production) & local development.
+//
+// Persistence is behind a `StorageDriver` interface so the application runs
+// against real Cloudflare D1 in production and a durable-in-process memory
+// driver when Cloudflare bindings are not available (local `next dev` / build).
+
+import { INITIAL_ASSESSMENTS } from "./catalog";
+
+// ---------------------------------------------------------------------------
+// Minimal structural types for the Cloudflare D1 binding.
+//
+// We deliberately avoid importing @cloudflare/workers-types (or
+// @cloudflare/next-on-pages): both reference the Workers ambient globals, whose
+// `Response.json<T>()` shadows the DOM lib's `Response.json()` in this
+// single-tsconfig project and breaks client-component typechecking. These
+// structural types stay assignment-compatible with the real D1 binding.
+// ---------------------------------------------------------------------------
+
+export interface D1PreparedStatement {
+  bind(...values: unknown[]): D1PreparedStatement;
+  first<T = unknown>(colName?: string | number): Promise<T | null>;
+  all<T = unknown>(colName?: string | number): Promise<{ results: T[]; success: boolean }>;
+  run<T = unknown>(): Promise<{ success: boolean; results?: T[]; meta?: unknown }>;
+}
+
+export interface D1Database {
+  prepare(query: string): D1PreparedStatement;
+}
+
+/** Minimal shape of the Cloudflare `env` object needed by the database layer. */
+export interface DbEnv {
+  DB?: D1Database;
+}
 
 export interface UserRecord {
   id: string;
   email: string;
   name: string;
   passwordHash: string;
-  role: 'candidate' | 'recruiter' | 'admin';
+  role: "candidate" | "recruiter" | "admin";
   createdAt: string;
 }
 
@@ -27,7 +59,7 @@ export interface RoadmapMilestone {
   id: string;
   title: string;
   category: string;
-  status: 'completed' | 'in-progress' | 'pending';
+  status: "completed" | "in-progress" | "pending";
   estimatedHours: number;
   description: string;
 }
@@ -37,7 +69,7 @@ export interface AssessmentTest {
   title: string;
   category: string;
   skill: string;
-  difficulty: 'Beginner' | 'Intermediate' | 'Advanced' | 'Expert';
+  difficulty: "Beginner" | "Intermediate" | "Advanced" | "Expert";
   questionCount: number;
   durationMinutes: number;
   questions: {
@@ -72,7 +104,7 @@ export interface TechInterviewSession {
   starterCode: string;
   testCases: { input: string; expected: string }[];
   userCode?: string;
-  status: 'in-progress' | 'completed';
+  status: "in-progress" | "completed";
   score?: number;
   feedback?: {
     correctness: number;
@@ -90,7 +122,7 @@ export interface HRInterviewSession {
   question: string;
   scenario: string;
   userResponse?: string;
-  status: 'in-progress' | 'completed';
+  status: "in-progress" | "completed";
   feedback?: {
     starScore: number;
     communicationScore: number;
@@ -122,263 +154,65 @@ export interface ResumeDocument {
   missingKeywords: string[];
 }
 
-class DatabaseService {
-  private users: Map<string, UserRecord> = new Map();
-  private careerContexts: Map<string, CareerContextRecord> = new Map();
-  private roadmaps: Map<string, RoadmapMilestone[]> = new Map();
-  private assessments: Map<string, AssessmentTest[]> = new Map();
-  private assessmentResults: Map<string, AssessmentResult[]> = new Map();
-  private techInterviews: Map<string, TechInterviewSession[]> = new Map();
-  private hrInterviews: Map<string, HRInterviewSession[]> = new Map();
-  private resumes: Map<string, ResumeDocument[]> = new Map();
-  private activities: Map<string, ActivityRecord[]> = new Map();
+/**
+ * Row type used to carry raw file content (base64) with resume metadata.
+ * R2 is not enabled on the account yet, so uploaded files are persisted
+ * durably in D1 as base64 behind a thin abstraction (see `saveUploadedFile`).
+ */
+export interface ResumeUploadInput extends ResumeDocument {
+  fileType?: string;
+  fileData?: string; // base64-encoded file content when stored in D1
+}
 
-  constructor() {
-    // Seed demo user
-    const demoUser: UserRecord = {
-      id: "usr_demo_101",
-      email: "demo@intellihire.dev",
-      name: "Alex Mercer",
-      passwordHash: "$2a$10$wE1Vp2e7O8KkL6sZg8.s.OPf3PZ1v5U3E1S1yO4t1tV7a4Hk9w4jS",
-      role: "candidate",
-      createdAt: new Date().toISOString(),
-    };
-    this.users.set(demoUser.email.toLowerCase(), demoUser);
-    this.users.set(demoUser.id, demoUser);
+// ---------------------------------------------------------------------------
+// Storage drivers
+// ---------------------------------------------------------------------------
 
-    const demoContext: CareerContextRecord = {
-      id: "ctx_demo_101",
-      userId: demoUser.id,
-      targetRole: "Senior Full-Stack Engineer",
-      targetIndustry: "Cloud & AI Platforms",
-      seniorityLevel: "Senior / Lead",
-      skills: ["TypeScript", "Next.js", "React", "Cloudflare Workers", "SQLite", "System Design", "AI Integration", "Tailwind CSS"],
-      readinessScore: 88,
-      atsScore: 92,
-      assessmentScore: 85,
-      interviewScore: 87,
-      updatedAt: new Date().toISOString(),
-    };
-    this.careerContexts.set(demoUser.id, demoContext);
+/**
+ * Persistence contract implemented by both the D1 driver (production) and the
+ * in-memory driver (local development). Each method is a low-level CRUD
+ * primitive; higher-level orchestration lives on `DatabaseService`.
+ */
+export interface StorageDriver {
+  findUserByEmail(email: string): Promise<UserRecord | null>;
+  findUserById(id: string): Promise<UserRecord | null>;
+  createUser(user: UserRecord): Promise<void>;
+  getCareerContext(userId: string): Promise<CareerContextRecord | null>;
+  upsertCareerContext(context: CareerContextRecord): Promise<void>;
+  getRoadmap(userId: string): Promise<RoadmapMilestone[]>;
+  saveRoadmap(userId: string, milestones: RoadmapMilestone[]): Promise<void>;
+  getAssessmentCatalog(): Promise<AssessmentTest[]>;
+  getAssessmentResults(userId: string): Promise<AssessmentResult[]>;
+  saveAssessmentResult(result: AssessmentResult): Promise<void>;
+  getTechInterviews(userId: string): Promise<TechInterviewSession[]>;
+  saveTechInterview(interview: TechInterviewSession): Promise<void>;
+  getHRInterviews(userId: string): Promise<HRInterviewSession[]>;
+  saveHRInterview(interview: HRInterviewSession): Promise<void>;
+  getResumes(userId: string): Promise<ResumeDocument[]>;
+  saveResume(resume: ResumeDocument): Promise<void>;
+  saveUploadedFile(resume: ResumeUploadInput): Promise<void>;
+  getActivities(userId: string): Promise<ActivityRecord[]>;
+  saveActivity(activity: ActivityRecord): Promise<void>;
+}
 
-    // Seed Roadmaps
-    this.roadmaps.set(demoUser.id, [
-      {
-        id: "ms_1",
-        title: "Master Edge-First Architecture & SQLite/D1",
-        category: "Backend & Systems",
-        status: "completed",
-        estimatedHours: 20,
-        description: "Deep dive into serverless edge runtime boundaries, ACID transactions in D1, and KV caching models.",
-      },
-      {
-        id: "ms_2",
-        title: "Distributed Rate Limiting & Concurrency Controls",
-        category: "Reliability & Scale",
-        status: "in-progress",
-        estimatedHours: 15,
-        description: "Implement token bucket and sliding log algorithms across multi-region edge nodes.",
-      },
-      {
-        id: "ms_3",
-        title: "LLM Agentic Tool Routing & Prompt Optimization",
-        category: "AI & Intelligence",
-        status: "pending",
-        estimatedHours: 25,
-        description: "Build robust multi-turn agent tool callers with schema validation and self-healing error recovery.",
-      },
-      {
-        id: "ms_4",
-        title: "Executive Behavioral & System Design Simulation",
-        category: "Interview Mastery",
-        status: "pending",
-        estimatedHours: 10,
-        description: "Complete 5 mock rounds with AI hiring committee simulations targeting Director/Lead benchmarks.",
-      }
-    ]);
+/** Deterministic id generation shared by the service and drivers. */
+export function generateId(prefix: string): string {
+  return `${prefix}_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+}
 
-    // Seed Assessment Tests
-    const initialTests: AssessmentTest[] = [
-      {
-        id: "test_ts_adv",
-        title: "TypeScript Advanced Type Systems & Generics",
-        category: "Frontend & Languages",
-        skill: "TypeScript",
-        difficulty: "Advanced",
-        questionCount: 4,
-        durationMinutes: 15,
-        questions: [
-          {
-            id: "q1",
-            question: "Which mapped type modifier removes the `readonly` constraint from all properties in `T`?",
-            options: ["-readonly [P in keyof T]: T[P]", "readonly [P in keyof T]?: T[P]", "+mutable [P in keyof T]: T[P]", "[P in keyof T as -readonly]: T[P]"],
-            correctIndex: 0,
-            explanation: "The `-readonly` prefix strips the readonly modifier from mapped type properties."
-          },
-          {
-            id: "q2",
-            question: "What is the return type of `type Foo<T> = T extends (...args: any[]) => infer R ? R : never` given `() => Promise<string>`?",
-            options: ["Promise<string>", "string", "never", "void"],
-            correctIndex: 0,
-            explanation: "The `infer R` extracts the full return type of the function signature, which is `Promise<string>`."
-          },
-          {
-            id: "q3",
-            question: "How do you enforce exhaustive checking in a TypeScript switch statement?",
-            options: ["Assign the unhandled case value to type `never`", "Use `default: return undefined;`", "Add `@ts-expect-error` to default", "Enable `noImplicitAny`"],
-            correctIndex: 0,
-            explanation: "Assigning the remaining value to `const _exhaustive: never = value` causes compile errors if cases are missed."
-          },
-          {
-            id: "q4",
-            question: "What is the key difference between `interface` and `type` regarding declaration merging?",
-            options: ["Interfaces merge with identical names in same scope; types throw duplicate identifier errors", "Types merge automatically; interfaces do not", "Interfaces cannot extend object types", "Types cannot be used in generic constraints"],
-            correctIndex: 0,
-            explanation: "Multiple interface declarations with the same name merge their definitions, while type aliases cannot be redeclared."
-          }
-        ]
-      },
-      {
-        id: "test_sys_design",
-        title: "Cloud Edge Computing & Distributed Cache Coherence",
-        category: "System Architecture",
-        skill: "System Design",
-        difficulty: "Advanced",
-        questionCount: 3,
-        durationMinutes: 12,
-        questions: [
-          {
-            id: "sd1",
-            question: "In an edge-first multi-region deployment, how does Cloudflare D1 handle write replication?",
-            options: ["Single primary leader handles writes with read replicas globally distributed", "Multi-master quorum writes across all regions", "Eventual consistency with client-side clock sync", "Two-phase commit across all edge pops"],
-            correctIndex: 0,
-            explanation: "D1 routes writes to a designated primary instance and asynchronously replicates read snapshots globally."
-          },
-          {
-            id: "sd2",
-            question: "Which cache invalidation strategy is most suitable for low-latency session validation at the edge?",
-            options: ["Short-lived JWTs with KV blacklist for revoked tokens", "Synchronous DB queries on every request", "Long-lived cookies with client-stored hashes", "Polling centralized Redis clusters"],
-            correctIndex: 0,
-            explanation: "Stateless short-lived JWTs combined with edge KV revocation checks provide microsecond verification without central DB bottlenecks."
-          },
-          {
-            id: "sd3",
-            question: "What is the primary benefit of deploying serverless functions at the CDN edge rather than centralized origins?",
-            options: ["Lower Time-To-First-Byte (TTFB) and TLS termination close to end-users", "Unlimited CPU execution timeouts", "Direct access to local disk filesystems", "Free background threads"],
-            correctIndex: 0,
-            explanation: "Edge execution runs code in hundreds of global data centers nearest the client, minimizing round-trip network latency."
-          }
-        ]
-      }
-    ];
-    this.assessments.set("catalog", initialTests);
+// ---------------------------------------------------------------------------
+// In-memory driver (local development fallback)
+// ---------------------------------------------------------------------------
 
-    // Seed assessment results
-    this.assessmentResults.set(demoUser.id, [
-      {
-        id: "res_demo_1",
-        userId: demoUser.id,
-        testId: "test_ts_adv",
-        testTitle: "TypeScript Advanced Type Systems & Generics",
-        skill: "TypeScript",
-        score: 100,
-        totalQuestions: 4,
-        correctCount: 4,
-        levelReached: "Expert (Level 5)",
-        completedAt: new Date(Date.now() - 86400000).toISOString()
-      }
-    ]);
-
-    // Seed Tech Interview
-    this.techInterviews.set(demoUser.id, [
-      {
-        id: "interview_tech_1",
-        userId: demoUser.id,
-        title: "LRU Cache Implementation with O(1) Operations",
-        language: "typescript",
-        difficulty: "Hard",
-        problemStatement: "Design a data structure that follows the constraints of a Least Recently Used (LRU) cache. Implement the LRUCache class with `get(key)` and `put(key, value)` both running in O(1) average time complexity.",
-        starterCode: `class LRUCache {\n  private capacity: number;\n  private cache: Map<number, number>;\n\n  constructor(capacity: number) {\n    this.capacity = capacity;\n    this.cache = new Map();\n  }\n\n  get(key: number): number {\n    if (!this.cache.has(key)) return -1;\n    const val = this.cache.get(key)!;\n    this.cache.delete(key);\n    this.cache.set(key, val);\n    return val;\n  }\n\n  put(key: number, value: number): void {\n    if (this.cache.has(key)) {\n      this.cache.delete(key);\n    } else if (this.cache.size >= this.capacity) {\n      const oldestKey = this.cache.keys().next().value;\n      if (oldestKey !== undefined) this.cache.delete(oldestKey);\n    }\n    this.cache.set(key, value);\n  }\n}`,
-        testCases: [
-          { input: "put(1,1), put(2,2), get(1), put(3,3), get(2)", expected: "1, -1" }
-        ],
-        status: "completed",
-        score: 95,
-        feedback: {
-          correctness: 100,
-          codeQuality: 92,
-          efficiency: 95,
-          notes: "Excellent solution leveraging Map insertion order semantics for clean O(1) eviction."
-        },
-        completedAt: new Date(Date.now() - 172800000).toISOString()
-      }
-    ]);
-
-    // Seed HR Interview
-    this.hrInterviews.set(demoUser.id, [
-      {
-        id: "interview_hr_1",
-        userId: demoUser.id,
-        category: "Leadership & Conflict Resolution",
-        scenario: "You are leading a high-impact product launch on a tight deadline. Two senior engineers on your team strongly disagree on whether to use GraphQL or tRPC, stalling progress for days. How do you resolve this?",
-        question: "Describe your approach to resolving this architectural stalemate while keeping the team aligned and hitting the milestone.",
-        userResponse: "I scheduled a time-boxed 45-minute decision matrix meeting. Beforehand, I asked both engineers to list their top 3 technical trade-offs against our specific launch criteria: bundle size, edge latency, and schema safety. We scored both options objectively against our deadline. We agreed to proceed with tRPC for the MVP due to our pure TypeScript stack, with a documented ADR acknowledging future GraphQL evaluation if public API requirements emerge. The team executed the decision collaboratively without lingering friction.",
-        status: "completed",
-        feedback: {
-          starScore: 92,
-          communicationScore: 90,
-          leadershipScore: 94,
-          critique: "Outstanding demonstration of structured mediation, objective evaluation frameworks, and team psychological safety.",
-          improvements: [
-            "Quantify the specific deadline metrics in the outcome statement."
-          ]
-        },
-        completedAt: new Date(Date.now() - 259200000).toISOString()
-      }
-    ]);
-
-    // Seed Resumes
-    this.resumes.set(demoUser.id, [
-      {
-        id: "res_doc_1",
-        userId: demoUser.id,
-        fileName: "Alex_Mercer_Senior_Staff_Resume_2026.pdf",
-        fileSize: 142800,
-        uploadDate: new Date(Date.now() - 7200000).toISOString(),
-        parsedSummary: "Senior Full-Stack & Distributed Systems Architect with 8+ years scaling Next.js, Cloudflare Workers, and multi-agent AI ecosystems.",
-        atsScore: 92,
-        suggestedKeywords: ["Distributed Systems", "Cloudflare Workers", "D1", "Next.js 14", "Tailwind CSS", "High Concurrency", "Prompt Engineering"],
-        missingKeywords: ["GraphQL Federation", "Kubernetes Operator"]
-      }
-    ]);
-
-    this.activities.set(demoUser.id, [
-      {
-        id: "act_1",
-        userId: demoUser.id,
-        type: "resume",
-        title: "ATS Resume Analysis Complete",
-        description: "Your master resume scored 92/100 for Cloud Platform Engineer targets.",
-        timestamp: "2 hours ago",
-      },
-      {
-        id: "act_2",
-        userId: demoUser.id,
-        type: "assessment",
-        title: "Adaptive Assessment Level 4 Passed",
-        description: "Verified proficiency in Distributed Systems and Cloud Architecture.",
-        timestamp: "Yesterday",
-      },
-      {
-        id: "act_3",
-        userId: demoUser.id,
-        type: "interview",
-        title: "Technical Mock Interview Passed",
-        description: "Completed System Design simulation with 87% positive rubric score.",
-        timestamp: "3 days ago",
-      },
-    ]);
-  }
+export class MemoryDriver implements StorageDriver {
+  private users = new Map<string, UserRecord>();  private careerContexts = new Map<string, CareerContextRecord>();
+  private roadmaps = new Map<string, RoadmapMilestone[]>();
+  private assessmentCatalog: AssessmentTest[] = [...INITIAL_ASSESSMENTS];
+  private assessmentResults = new Map<string, AssessmentResult[]>();
+  private techInterviews = new Map<string, TechInterviewSession[]>();
+  private hrInterviews = new Map<string, HRInterviewSession[]>();
+  private resumes = new Map<string, ResumeDocument[]>();
+  private activities = new Map<string, ActivityRecord[]>();
 
   async findUserByEmail(email: string): Promise<UserRecord | null> {
     return this.users.get(email.toLowerCase()) || null;
@@ -388,19 +222,613 @@ class DatabaseService {
     return this.users.get(id) || null;
   }
 
+  async createUser(user: UserRecord): Promise<void> {
+    this.users.set(user.email, user);
+    this.users.set(user.id, user);
+  }
+
+  async getCareerContext(userId: string): Promise<CareerContextRecord | null> {
+    return this.careerContexts.get(userId) || null;
+  }
+
+  async upsertCareerContext(context: CareerContextRecord): Promise<void> {
+    this.careerContexts.set(context.userId, context);
+  }
+
+  async getRoadmap(userId: string): Promise<RoadmapMilestone[]> {
+    return this.roadmaps.get(userId) || [];
+  }
+
+  async saveRoadmap(userId: string, milestones: RoadmapMilestone[]): Promise<void> {
+    this.roadmaps.set(userId, milestones);
+  }
+
+  async getAssessmentCatalog(): Promise<AssessmentTest[]> {
+    return this.assessmentCatalog;
+  }
+
+  async getAssessmentResults(userId: string): Promise<AssessmentResult[]> {
+    return this.assessmentResults.get(userId) || [];
+  }
+
+  async saveAssessmentResult(result: AssessmentResult): Promise<void> {
+    const list = this.assessmentResults.get(result.userId) || [];
+    list.unshift(result);
+    this.assessmentResults.set(result.userId, list);
+  }
+
+  async getTechInterviews(userId: string): Promise<TechInterviewSession[]> {
+    return this.techInterviews.get(userId) || [];
+  }
+
+  async saveTechInterview(interview: TechInterviewSession): Promise<void> {
+    const list = this.techInterviews.get(interview.userId) || [];
+    list.unshift(interview);
+    this.techInterviews.set(interview.userId, list);
+  }
+
+  async getHRInterviews(userId: string): Promise<HRInterviewSession[]> {
+    return this.hrInterviews.get(userId) || [];
+  }
+
+  async saveHRInterview(interview: HRInterviewSession): Promise<void> {
+    const list = this.hrInterviews.get(interview.userId) || [];
+    list.unshift(interview);
+    this.hrInterviews.set(interview.userId, list);
+  }
+
+  async getResumes(userId: string): Promise<ResumeDocument[]> {
+    return this.resumes.get(userId) || [];
+  }
+
+  async saveResume(resume: ResumeDocument): Promise<void> {
+    const list = this.resumes.get(resume.userId) || [];
+    list.unshift(resume);
+    this.resumes.set(resume.userId, list);
+  }
+
+  async saveUploadedFile(resume: ResumeUploadInput): Promise<void> {
+    // ResumeUploadInput extends ResumeDocument; the extra file metadata fields
+    // are simply not represented in the in-memory resume store.
+    await this.saveResume(resume);
+  }
+
+  async getActivities(userId: string): Promise<ActivityRecord[]> {
+    return this.activities.get(userId) || [];
+  }
+
+  async saveActivity(activity: ActivityRecord): Promise<void> {
+    const list = this.activities.get(activity.userId) || [];
+    list.unshift(activity);
+    this.activities.set(activity.userId, list.slice(0, 50));
+  }
+}
+
+/** Shared in-memory driver: data survives across requests within the process. */
+const memoryDriver = new MemoryDriver();
+
+// ---------------------------------------------------------------------------
+// D1 driver (production)
+// ---------------------------------------------------------------------------
+
+interface UserRow {
+  id: string;
+  email: string;
+  name: string | null;
+  password_hash: string | null;
+  role: string | null;
+  created_at: string | null;
+}
+
+interface CareerContextRow {
+  id: string;
+  user_id: string;
+  target_role: string | null;
+  target_industry: string | null;
+  seniority_level: string | null;
+  skills_summary: string | null;
+  readiness_score: number | null;
+  ats_score: number | null;
+  assessment_score: number | null;
+  interview_score: number | null;
+  updated_at: string | null;
+}
+
+interface RoadmapRow {
+  user_id: string;
+  stages: string;
+}
+
+interface CatalogRow {
+  id: string;
+  title: string;
+  category: string | null;
+  skill: string | null;
+  difficulty: string | null;
+  question_count: number | null;
+  duration_minutes: number | null;
+  questions: string;
+}
+
+interface AssessmentRow {
+  id: string;
+  test_id: string | null;
+  test_title: string | null;
+  skill: string | null;
+  score: number | null;
+  total_questions: number | null;
+  correct_count: number | null;
+  level_reached: string | null;
+  created_at: string;
+}
+
+interface TechInterviewRow {
+  id: string;
+  title: string;
+  language: string | null;
+  difficulty: string | null;
+  problem_statement: string;
+  starter_code: string | null;
+  test_cases: string | null;
+  user_code: string | null;
+  status: string | null;
+  score: number | null;
+  feedback: string | null;
+  completed_at: string | null;
+}
+
+interface HRInterviewRow {
+  id: string;
+  category: string;
+  question: string;
+  scenario: string | null;
+  user_response: string | null;
+  status: string | null;
+  feedback: string | null;
+  completed_at: string | null;
+}
+
+interface DocumentRow {
+  id: string;
+  file_name: string;
+  file_size: number;
+  file_type: string | null;
+  file_data: string | null;
+  parsed_summary: string | null;
+  ats_score: number | null;
+  suggested_keywords: string | null;
+  missing_keywords: string | null;
+  uploaded_at: string;
+}
+
+interface ActivityRow {
+  id: string;
+  type: string;
+  title: string | null;
+  description: string | null;
+  timestamp: string | null;
+  created_at: string;
+}
+
+function parseJson<T>(value: string | null | undefined, fallback: T): T {
+  if (value === null || value === undefined || value === "") return fallback;
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+export class D1Driver implements StorageDriver {
+  constructor(private db: D1Database) {}
+
+  async findUserByEmail(email: string): Promise<UserRecord | null> {
+    const row = await this.db
+      .prepare("SELECT * FROM users WHERE email = ?1")
+      .bind(email.toLowerCase())
+      .first<UserRow>();
+    return row ? mapUser(row) : null;
+  }
+
+  async findUserById(id: string): Promise<UserRecord | null> {
+    const row = await this.db
+      .prepare("SELECT * FROM users WHERE id = ?1")
+      .bind(id)
+      .first<UserRow>();
+    return row ? mapUser(row) : null;
+  }
+
+  async createUser(user: UserRecord): Promise<void> {
+    await this.db
+      .prepare(
+        "INSERT INTO users (id, email, name, password_hash, role, created_at) VALUES (?1, ?2, ?3, ?4, ?5, COALESCE(?6, datetime('now')))"
+      )
+      .bind(user.id, user.email.toLowerCase(), user.name, user.passwordHash, user.role, user.createdAt)
+      .run();
+  }
+
+  async getCareerContext(userId: string): Promise<CareerContextRecord | null> {
+    const row = await this.db
+      .prepare("SELECT * FROM career_contexts WHERE user_id = ?1 LIMIT 1")
+      .bind(userId)
+      .first<CareerContextRow>();
+    return row ? mapCareerContext(row) : null;
+  }
+
+  async upsertCareerContext(context: CareerContextRecord): Promise<void> {
+    await this.db
+      .prepare(
+        `INSERT INTO career_contexts
+           (id, user_id, target_role, target_industry, seniority_level, skills_summary,
+            readiness_score, ats_score, assessment_score, interview_score, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+         ON CONFLICT(user_id) DO UPDATE SET
+           target_role = excluded.target_role,
+           target_industry = excluded.target_industry,
+           seniority_level = excluded.seniority_level,
+           skills_summary = excluded.skills_summary,
+           readiness_score = excluded.readiness_score,
+           ats_score = excluded.ats_score,
+           assessment_score = excluded.assessment_score,
+           interview_score = excluded.interview_score,
+           updated_at = excluded.updated_at`
+      )
+      .bind(
+        context.id,
+        context.userId,
+        context.targetRole ?? null,
+        context.targetIndustry ?? null,
+        context.seniorityLevel ?? null,
+        context.skills ? JSON.stringify(context.skills) : null,
+        context.readinessScore ?? 0,
+        context.atsScore ?? 0,
+        context.assessmentScore ?? 0,
+        context.interviewScore ?? 0,
+        context.updatedAt ?? new Date().toISOString()
+      )
+      .run();
+  }
+
+  async getRoadmap(userId: string): Promise<RoadmapMilestone[]> {
+    const row = await this.db
+      .prepare("SELECT user_id, stages FROM career_roadmaps WHERE user_id = ?1 LIMIT 1")
+      .bind(userId)
+      .first<RoadmapRow>();
+    return row ? parseJson<RoadmapMilestone[]>(row.stages, []) : [];
+  }
+
+  async saveRoadmap(userId: string, milestones: RoadmapMilestone[]): Promise<void> {
+    await this.db
+      .prepare(
+        `INSERT INTO career_roadmaps (id, user_id, stages, updated_at)
+         VALUES (?1, ?2, ?3, ?4)
+         ON CONFLICT(user_id) DO UPDATE SET stages = excluded.stages, updated_at = excluded.updated_at`
+      )
+      .bind(`roadmap_${userId}`, userId, JSON.stringify(milestones), new Date().toISOString())
+      .run();
+  }
+
+  async getAssessmentCatalog(): Promise<AssessmentTest[]> {
+    // Provision the question bank from the canonical static catalog on first use.
+    const { results } = await this.db.prepare("SELECT COUNT(*) AS count FROM assessment_catalog").all<{ count: number }>();
+    if ((results[0]?.count ?? 0) === 0) {
+      for (const test of INITIAL_ASSESSMENTS) {
+        await this.db
+          .prepare(
+            `INSERT INTO assessment_catalog
+               (id, title, category, skill, difficulty, question_count, duration_minutes, questions)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`
+          )
+          .bind(
+            test.id,
+            test.title,
+            test.category,
+            test.skill,
+            test.difficulty,
+            test.questionCount,
+            test.durationMinutes,
+            JSON.stringify(test.questions)
+          )
+          .run();
+      }
+    }
+    const { results: rows } = await this.db
+      .prepare("SELECT * FROM assessment_catalog ORDER BY id")
+      .all<CatalogRow>();
+    return rows.map(mapCatalogTest);
+  }
+
+  async getAssessmentResults(userId: string): Promise<AssessmentResult[]> {
+    const { results } = await this.db
+      .prepare("SELECT * FROM assessments WHERE user_id = ?1 ORDER BY created_at DESC")
+      .bind(userId)
+      .all<AssessmentRow>();
+    return results.map(mapAssessmentResult);
+  }
+
+  async saveAssessmentResult(result: AssessmentResult): Promise<void> {
+    await this.db
+      .prepare(
+        `INSERT INTO assessments
+           (id, user_id, test_id, test_title, skill, score, total_questions, correct_count, level_reached, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)`
+      )
+      .bind(
+        result.id,
+        result.userId,
+        result.testId ?? null,
+        result.testTitle ?? null,
+        result.skill ?? null,
+        result.score ?? null,
+        result.totalQuestions ?? null,
+        result.correctCount ?? null,
+        result.levelReached ?? null,
+        result.completedAt ?? new Date().toISOString()
+      )
+      .run();
+  }
+
+  async getTechInterviews(userId: string): Promise<TechInterviewSession[]> {
+    const { results } = await this.db
+      .prepare("SELECT * FROM tech_interviews WHERE user_id = ?1 ORDER BY created_at DESC")
+      .bind(userId)
+      .all<TechInterviewRow>();
+    return results.map(mapTechInterview);
+  }
+
+  async saveTechInterview(interview: TechInterviewSession): Promise<void> {
+    await this.db
+      .prepare(
+        `INSERT INTO tech_interviews
+           (id, user_id, title, language, difficulty, problem_statement, starter_code,
+            test_cases, user_code, status, score, feedback, completed_at, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)`
+      )
+      .bind(
+        interview.id,
+        interview.userId,
+        interview.title,
+        interview.language ?? null,
+        interview.difficulty ?? null,
+        interview.problemStatement,
+        interview.starterCode ?? null,
+        JSON.stringify(interview.testCases || []),
+        interview.userCode ?? null,
+        interview.status ?? null,
+        interview.score ?? null,
+        JSON.stringify(interview.feedback || null),
+        interview.completedAt ?? null,
+        new Date().toISOString()
+      )
+      .run();
+  }
+
+  async getHRInterviews(userId: string): Promise<HRInterviewSession[]> {
+    const { results } = await this.db
+      .prepare("SELECT * FROM hr_interviews WHERE user_id = ?1 ORDER BY created_at DESC")
+      .bind(userId)
+      .all<HRInterviewRow>();
+    return results.map(mapHRInterview);
+  }
+
+  async saveHRInterview(interview: HRInterviewSession): Promise<void> {
+    await this.db
+      .prepare(
+        `INSERT INTO hr_interviews
+           (id, user_id, category, question, scenario, user_response, status, feedback, completed_at, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)`
+      )
+      .bind(
+        interview.id,
+        interview.userId,
+        interview.category,
+        interview.question,
+        interview.scenario ?? null,
+        interview.userResponse ?? null,
+        interview.status ?? null,
+        JSON.stringify(interview.feedback || null),
+        interview.completedAt ?? null,
+        new Date().toISOString()
+      )
+      .run();
+  }
+
+  async getResumes(userId: string): Promise<ResumeDocument[]> {
+    const { results } = await this.db
+      .prepare("SELECT * FROM documents WHERE user_id = ?1 ORDER BY uploaded_at DESC")
+      .bind(userId)
+      .all<DocumentRow>();
+    return results.map((row) => ({
+      id: row.id,
+      userId,
+      fileName: row.file_name,
+      fileSize: row.file_size,
+      uploadDate: row.uploaded_at,
+      parsedSummary: row.parsed_summary || "",
+      atsScore: row.ats_score ?? 0,
+      suggestedKeywords: parseJson<string[]>(row.suggested_keywords, []),
+      missingKeywords: parseJson<string[]>(row.missing_keywords, []),
+    }));
+  }
+
+  async saveResume(resume: ResumeDocument): Promise<void> {
+    await this.saveUploadedFile(resume);
+  }
+
+  async saveUploadedFile(resume: ResumeUploadInput): Promise<void> {
+    await this.db
+      .prepare(
+        `INSERT INTO documents
+           (id, user_id, file_name, file_type, file_size, file_data, parsed_summary,
+            ats_score, suggested_keywords, missing_keywords, uploaded_at, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)`
+      )
+      .bind(
+        resume.id,
+        resume.userId,
+        resume.fileName,
+        resume.fileType ?? null,
+        resume.fileSize ?? 0,
+        resume.fileData ?? null,
+        resume.parsedSummary ?? "",
+        resume.atsScore ?? 0,
+        JSON.stringify(resume.suggestedKeywords || []),
+        JSON.stringify(resume.missingKeywords || []),
+        resume.uploadDate ?? new Date().toISOString(),
+        new Date().toISOString()
+      )
+      .run();
+  }
+
+  async getActivities(userId: string): Promise<ActivityRecord[]> {
+    const { results } = await this.db
+      .prepare("SELECT * FROM activity_logs WHERE user_id = ?1 ORDER BY created_at DESC LIMIT 50")
+      .bind(userId)
+      .all<ActivityRow>();
+    return results.map((row) => ({
+      id: row.id,
+      userId,
+      type: row.type,
+      title: row.title || "",
+      description: row.description || "",
+      timestamp: row.timestamp || row.created_at,
+    }));
+  }
+
+  async saveActivity(activity: ActivityRecord): Promise<void> {
+    await this.db
+      .prepare(
+        "INSERT INTO activity_logs (id, user_id, type, title, description, timestamp, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)"
+      )
+      .bind(
+        activity.id,
+        activity.userId,
+        activity.type,
+        activity.title,
+        activity.description,
+        activity.timestamp,
+        new Date().toISOString()
+      )
+      .run();
+  }
+}
+
+// Row -> record mappers
+function mapUser(row: UserRow): UserRecord {
+  return {
+    id: row.id,
+    email: row.email,
+    name: row.name || "",
+    passwordHash: row.password_hash || "",
+    role: (row.role as UserRecord["role"]) || "candidate",
+    createdAt: row.created_at || new Date().toISOString(),
+  };
+}
+
+function mapCareerContext(row: CareerContextRow): CareerContextRecord {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    targetRole: row.target_role || "Software Engineer",
+    targetIndustry: row.target_industry || "Technology",
+    seniorityLevel: row.seniority_level || "Mid-Level",
+    skills: parseJson<string[]>(row.skills_summary, []),
+    readinessScore: row.readiness_score ?? 0,
+    atsScore: row.ats_score ?? 0,
+    assessmentScore: row.assessment_score ?? 0,
+    interviewScore: row.interview_score ?? 0,
+    updatedAt: row.updated_at || new Date().toISOString(),
+  };
+}
+
+function mapCatalogTest(row: CatalogRow): AssessmentTest {
+  return {
+    id: row.id,
+    title: row.title,
+    category: row.category || "",
+    skill: row.skill || "",
+    difficulty: (row.difficulty as AssessmentTest["difficulty"]) || "Beginner",
+    questionCount: row.question_count ?? 0,
+    durationMinutes: row.duration_minutes ?? 0,
+    questions: parseJson(row.questions, []),
+  };
+}
+
+function mapAssessmentResult(row: AssessmentRow): AssessmentResult {
+  return {
+    id: row.id,
+    userId: "", // filled by caller via row context
+    testId: row.test_id || "",
+    testTitle: row.test_title || "",
+    skill: row.skill || "",
+    score: row.score ?? 0,
+    totalQuestions: row.total_questions ?? 0,
+    correctCount: row.correct_count ?? 0,
+    levelReached: row.level_reached || "",
+    completedAt: row.created_at || new Date().toISOString(),
+  };
+}
+
+function mapTechInterview(row: TechInterviewRow): TechInterviewSession {
+  return {
+    id: row.id,
+    userId: "",
+    title: row.title,
+    language: row.language || "typescript",
+    difficulty: row.difficulty || "Medium",
+    problemStatement: row.problem_statement,
+    starterCode: row.starter_code || "",
+    testCases: parseJson(row.test_cases, []),
+    userCode: row.user_code || undefined,
+    status: (row.status as TechInterviewSession["status"]) || "completed",
+    score: row.score ?? undefined,
+    feedback: parseJson(row.feedback, undefined),
+    completedAt: row.completed_at || undefined,
+  };
+}
+
+function mapHRInterview(row: HRInterviewRow): HRInterviewSession {
+  return {
+    id: row.id,
+    userId: "",
+    category: row.category,
+    question: row.question,
+    scenario: row.scenario || "",
+    userResponse: row.user_response || undefined,
+    status: (row.status as HRInterviewSession["status"]) || "completed",
+    feedback: parseJson(row.feedback, undefined),
+    completedAt: row.completed_at || undefined,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// DatabaseService (higher-level orchestration shared by both drivers)
+// ---------------------------------------------------------------------------
+
+export class DatabaseService {
+  constructor(private driver: StorageDriver) {}
+
+  async findUserByEmail(email: string): Promise<UserRecord | null> {
+    return this.driver.findUserByEmail(email);
+  }
+
+  async findUserById(id: string): Promise<UserRecord | null> {
+    return this.driver.findUserById(id);
+  }
+
   async createUser(data: Omit<UserRecord, "id" | "createdAt">): Promise<UserRecord> {
-    const id = `usr_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const id = generateId("usr");
     const user: UserRecord = {
       ...data,
       id,
       email: data.email.toLowerCase(),
       createdAt: new Date().toISOString(),
     };
-    this.users.set(user.email, user);
-    this.users.set(user.id, user);
+    await this.driver.createUser(user);
 
+    // Initialize a default career context.
     const context: CareerContextRecord = {
-      id: `ctx_${Date.now()}`,
+      id: generateId("ctx"),
       userId: id,
       targetRole: "Software Engineer",
       targetIndustry: "Technology",
@@ -412,42 +840,39 @@ class DatabaseService {
       interviewScore: 76,
       updatedAt: new Date().toISOString(),
     };
-    this.careerContexts.set(id, context);
+    await this.driver.upsertCareerContext(context);
 
-    this.roadmaps.set(id, [
+    // Seed an initial roadmap milestone.
+    await this.driver.saveRoadmap(id, [
       {
-        id: `ms_${Date.now()}_1`,
+        id: generateId("ms"),
         title: "Initial Skill Gap Assessment",
         category: "Foundations",
         status: "in-progress",
         estimatedHours: 5,
         description: "Complete your baseline assessment across core language competencies.",
-      }
-    ]);
-
-    this.activities.set(id, [
-      {
-        id: `act_${Date.now()}`,
-        userId: id,
-        type: "account",
-        title: "Welcome to IntelliHire",
-        description: "Your unified career intelligence context has been initialized.",
-        timestamp: "Just now",
       },
     ]);
+
+    await this.addActivity(id, {
+      type: "account",
+      title: "Welcome to IntelliHire",
+      description: "Your unified career intelligence context has been initialized.",
+      timestamp: "Just now",
+    });
 
     return user;
   }
 
   async getCareerContext(userId: string): Promise<CareerContextRecord | null> {
-    return this.careerContexts.get(userId) || null;
+    return this.driver.getCareerContext(userId);
   }
 
   async updateCareerContext(userId: string, data: Partial<CareerContextRecord>): Promise<CareerContextRecord> {
-    const current = await this.getCareerContext(userId);
+    const current = await this.driver.getCareerContext(userId);
     const updated: CareerContextRecord = {
       ...(current || {
-        id: `ctx_${Date.now()}`,
+        id: generateId("ctx"),
         userId,
         targetRole: "Software Engineer",
         targetIndustry: "Technology",
@@ -462,138 +887,194 @@ class DatabaseService {
       ...data,
       updatedAt: new Date().toISOString(),
     };
-    this.careerContexts.set(userId, updated);
+    await this.driver.upsertCareerContext(updated);
     return updated;
   }
 
   async getRoadmap(userId: string): Promise<RoadmapMilestone[]> {
-    return this.roadmaps.get(userId) || [];
+    return this.driver.getRoadmap(userId);
   }
 
   async addRoadmapMilestone(userId: string, milestone: Omit<RoadmapMilestone, "id">): Promise<RoadmapMilestone> {
     const record: RoadmapMilestone = {
       ...milestone,
-      id: `ms_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      id: generateId("ms"),
     };
-    const list = this.roadmaps.get(userId) || [];
+    const list = await this.driver.getRoadmap(userId);
     list.push(record);
-    this.roadmaps.set(userId, list);
+    await this.driver.saveRoadmap(userId, list);
     return record;
   }
 
-  async updateRoadmapMilestone(userId: string, milestoneId: string, status: RoadmapMilestone['status']): Promise<RoadmapMilestone | null> {
-    const list = this.roadmaps.get(userId) || [];
-    const item = list.find(m => m.id === milestoneId);
+  async updateRoadmapMilestone(
+    userId: string,
+    milestoneId: string,
+    status: RoadmapMilestone["status"]
+  ): Promise<RoadmapMilestone | null> {
+    const list = await this.driver.getRoadmap(userId);
+    const item = list.find((m) => m.id === milestoneId);
     if (!item) return null;
     item.status = status;
+    await this.driver.saveRoadmap(userId, list);
     return item;
   }
 
   async getAssessmentCatalog(): Promise<AssessmentTest[]> {
-    return this.assessments.get("catalog") || [];
+    return this.driver.getAssessmentCatalog();
   }
 
   async getAssessmentResults(userId: string): Promise<AssessmentResult[]> {
-    return this.assessmentResults.get(userId) || [];
+    const raw = await this.driver.getAssessmentResults(userId);
+    return raw.map((r) => ({ ...r, userId }));
   }
 
   async recordAssessmentResult(result: Omit<AssessmentResult, "id" | "completedAt">): Promise<AssessmentResult> {
     const record: AssessmentResult = {
       ...result,
-      id: `res_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      id: generateId("res"),
       completedAt: new Date().toISOString(),
     };
-    const list = this.assessmentResults.get(result.userId) || [];
-    list.unshift(record);
-    this.assessmentResults.set(result.userId, list);
+    await this.driver.saveAssessmentResult(record);
 
-    // Auto-update career context assessment score
-    const avgScore = Math.round(list.reduce((acc, r) => acc + r.score, 0) / list.length);
+    // Auto-update career context assessment score.
+    const list = await this.driver.getAssessmentResults(result.userId);
+    const avgScore = Math.round(list.reduce((acc, r) => acc + r.score, 0) / (list.length || 1));
     await this.updateCareerContext(result.userId, { assessmentScore: avgScore });
 
     await this.addActivity(result.userId, {
       type: "assessment",
       title: `Assessment Completed: ${result.testTitle}`,
       description: `Scored ${result.score}% (${result.correctCount}/${result.totalQuestions} correct) - ${result.levelReached}`,
-      timestamp: "Just now"
+      timestamp: "Just now",
     });
 
     return record;
   }
 
   async getTechInterviews(userId: string): Promise<TechInterviewSession[]> {
-    return this.techInterviews.get(userId) || [];
+    const raw = await this.driver.getTechInterviews(userId);
+    return raw.map((i) => ({ ...i, userId }));
   }
 
   async createTechInterview(interview: Omit<TechInterviewSession, "id">): Promise<TechInterviewSession> {
     const record: TechInterviewSession = {
       ...interview,
-      id: `tech_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      id: generateId("tech"),
     };
-    const list = this.techInterviews.get(interview.userId) || [];
-    list.unshift(record);
-    this.techInterviews.set(interview.userId, list);
+    await this.driver.saveTechInterview(record);
     return record;
   }
 
   async getHRInterviews(userId: string): Promise<HRInterviewSession[]> {
-    return this.hrInterviews.get(userId) || [];
+    const raw = await this.driver.getHRInterviews(userId);
+    return raw.map((i) => ({ ...i, userId }));
   }
 
   async createHRInterview(interview: Omit<HRInterviewSession, "id">): Promise<HRInterviewSession> {
     const record: HRInterviewSession = {
       ...interview,
-      id: `hr_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      id: generateId("hr"),
     };
-    const list = this.hrInterviews.get(interview.userId) || [];
-    list.unshift(record);
-    this.hrInterviews.set(interview.userId, list);
+    await this.driver.saveHRInterview(record);
     return record;
   }
 
   async getResumes(userId: string): Promise<ResumeDocument[]> {
-    return this.resumes.get(userId) || [];
+    const raw = await this.driver.getResumes(userId);
+    return raw.map((r) => ({ ...r, userId }));
   }
 
   async saveResume(resume: Omit<ResumeDocument, "id" | "uploadDate">): Promise<ResumeDocument> {
     const record: ResumeDocument = {
       ...resume,
-      id: `doc_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      id: generateId("doc"),
       uploadDate: new Date().toISOString(),
     };
-    const list = this.resumes.get(resume.userId) || [];
-    list.unshift(record);
-    this.resumes.set(resume.userId, list);
+    await this.driver.saveResume(record);
 
     await this.updateCareerContext(resume.userId, { atsScore: resume.atsScore });
     await this.addActivity(resume.userId, {
       type: "resume",
-      title: `Resume Uploaded & Analyzed`,
+      title: "Resume Uploaded & Analyzed",
       description: `${resume.fileName} scored ${resume.atsScore}/100 ATS compatibility.`,
-      timestamp: "Just now"
+      timestamp: "Just now",
     });
 
     return record;
   }
 
+  /** Persist a raw uploaded file (base64) durably behind the storage abstraction. */
+  async saveUploadedFile(resumeInput: Omit<ResumeUploadInput, "id" | "uploadDate">): Promise<ResumeDocument> {
+    const record: ResumeUploadInput = {
+      ...resumeInput,
+      id: generateId("doc"),
+      uploadDate: new Date().toISOString(),
+    };
+    await this.driver.saveUploadedFile(record);
+    return record;
+  }
+
   async getActivities(userId: string): Promise<ActivityRecord[]> {
-    return this.activities.get(userId) || [];
+    const raw = await this.driver.getActivities(userId);
+    return raw.map((a) => ({ ...a, userId }));
   }
 
   async addActivity(userId: string, activity: Omit<ActivityRecord, "id" | "userId">): Promise<ActivityRecord> {
     const record: ActivityRecord = {
       ...activity,
-      id: `act_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      id: generateId("act"),
       userId,
     };
-    const list = this.activities.get(userId) || [];
-    list.unshift(record);
-    this.activities.set(userId, list.slice(0, 20));
+    await this.driver.saveActivity(record);
     return record;
   }
 }
 
-// Global singleton database instance
-const globalForDb = globalThis as unknown as { dbService: DatabaseService };
-export const db = globalForDb.dbService || new DatabaseService();
-if (process.env.NODE_ENV !== "production") globalForDb.dbService = db;
+// ---------------------------------------------------------------------------
+// Factory helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Symbol key under which the `@cloudflare/next-on-pages` runtime stores the
+ * current request context on `globalThis` when running on Cloudflare Pages.
+ * Read it directly to obtain the `env` bindings (including `DB`) without
+ * importing the library (whose ambient Workers types conflict with the DOM
+ * lib used by client components in this single-tsconfig project).
+ */
+const CLOUDFLARE_REQUEST_CONTEXT = Symbol.for("__cloudflare-request-context__");
+
+interface CloudflareRequestContext {
+  env?: DbEnv;
+  cf?: unknown;
+  ctx?: unknown;
+}
+
+/** Resolve the current request's Cloudflare `env`, or `undefined` in local dev. */
+function currentCloudflareEnv(): DbEnv | undefined {
+  try {
+    const ctx = (globalThis as Record<symbol, unknown>)[CLOUDFLARE_REQUEST_CONTEXT] as
+      | CloudflareRequestContext
+      | undefined;
+    return ctx?.env;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Build a `DatabaseService` for the given Cloudflare env. Falls back to the
+ * shared in-memory driver when no D1 binding is present (local development).
+ */
+export function getDb(env?: DbEnv): DatabaseService {
+  return env && env.DB ? new DatabaseService(new D1Driver(env.DB)) : new DatabaseService(memoryDriver);
+}
+
+/**
+ * Resolve the current request's D1 binding and return a request-scoped service.
+ * When not running on the Cloudflare runtime (local `next dev` / `next build`),
+ * gracefully falls back to the in-memory driver so the app remains functional
+ * without Cloudflare bindings.
+ */
+export function requestDb(): DatabaseService {
+  return getDb(currentCloudflareEnv());
+}

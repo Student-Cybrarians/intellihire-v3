@@ -1,21 +1,22 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { requestDb } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
+    const db = requestDb();
     const user = await getCurrentUser();
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const context = await db.getCareerContext(user.id);
-    const results = await db.getAssessmentResults(user.id);
+    const _results = await db.getAssessmentResults(user.id);
     const techInterviews = await db.getTechInterviews(user.id);
     const hrInterviews = await db.getHRInterviews(user.id);
-    const resumes = await db.getResumes(user.id);
+    const _resumes = await db.getResumes(user.id);
 
     const atsScore = context?.atsScore || 85;
     const assessmentScore = context?.assessmentScore || 80;

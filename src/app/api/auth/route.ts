@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession, createToken, comparePassword, SESSION_COOKIE_NAME } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { requestDb } from "@/lib/db";
 
 export async function GET() {
   try {
@@ -21,6 +21,7 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
+    const db = requestDb();
     const body = await request.json();
     const { email, password } = body;
 

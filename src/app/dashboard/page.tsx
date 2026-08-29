@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { cn } from "@/lib/utils";
 
 interface DashboardUser {
   id: string;

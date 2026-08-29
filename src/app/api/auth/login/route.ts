@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { db } from "@/lib/db";
+import { requestDb } from "@/lib/db";
 import { comparePassword, createToken, SESSION_COOKIE_NAME } from "@/lib/auth";
 
 const loginSchema = z.object({
@@ -10,6 +10,7 @@ const loginSchema = z.object({
 
 export async function POST(req: NextRequest) {
   try {
+    const db = requestDb();
     const body = await req.json();
     const result = loginSchema.safeParse(body);
 

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { db } from "@/lib/db";
+import { requestDb } from "@/lib/db";
 import { hashPassword, createToken, SESSION_COOKIE_NAME } from "@/lib/auth";
 
 const registerSchema = z.object({
@@ -12,6 +12,7 @@ const registerSchema = z.object({
 
 export async function POST(req: NextRequest) {
   try {
+    const db = requestDb();
     const body = await req.json();
     const result = registerSchema.safeParse(body);
 

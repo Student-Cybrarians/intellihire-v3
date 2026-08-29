@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { ArrowLeft, CheckCircle2, Clock, Upload, Plus, Trash2, Award, Sparkles, Briefcase, FileText, ChevronRight } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Clock, Upload, Plus, Trash2, Award, Sparkles, Briefcase, FileText } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface CareerContext {

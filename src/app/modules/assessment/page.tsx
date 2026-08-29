@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { ArrowLeft, CheckCircle2, Clock, Award, Play, ChevronRight, RefreshCw, BarChart2, ShieldCheck } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Clock, Award, Play, BarChart2, ShieldCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface Question {
