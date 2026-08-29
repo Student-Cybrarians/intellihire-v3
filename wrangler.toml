@@ -1,0 +1,29 @@
+name = "intellihire-v3"
+main = ".open-next/worker.js"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+# D1 Database
+[[d1_databases]]
+binding = "DB"
+database_name = "intellihire_db"
+database_id = "placeholder-d1-id"
+
+# R2 Object Storage
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "intellihire-uploads"
+
+# KV Namespaces
+[[kv_namespaces]]
+binding = "SESSION_STORE"
+id = "placeholder-kv-id"
+
+# Workers AI
+[ai]
+binding = "AI"
+
+# Routes / Domain
+routes = [
+  { pattern = "intellihire.is-a.dev/*", zone_name = "is-a.dev" }
+]
