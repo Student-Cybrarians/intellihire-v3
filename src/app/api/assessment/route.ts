@@ -4,6 +4,7 @@ import { requestDb } from "@/lib/db";
 import type { AssessmentTest } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
+export const runtime = "edge";
 
 /**
  * Strip the answer key (`correctIndex`, `explanation`) before serving questions

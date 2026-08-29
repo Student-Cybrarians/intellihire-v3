@@ -4,6 +4,7 @@ import { requestDb } from "@/lib/db";
 import { z } from "zod";
 
 export const dynamic = "force-dynamic";
+export const runtime = "edge";
 
 const submitSchema = z.object({
   testId: z.string(),

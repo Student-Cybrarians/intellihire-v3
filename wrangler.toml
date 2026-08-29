@@ -1,7 +1,16 @@
 name = "intellihire-v3"
-main = ".open-next/worker.js"
 compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
+
+# Deployment target: Cloudflare Pages via @cloudflare/next-on-pages.
+#   npm run pages:build   ->  npx @cloudflare/next-on-pages  (emits .vercel/output/static)
+#   npm run deploy        ->  wrangler pages deploy .vercel/output/static
+#
+# NOTE: this project does NOT use OpenNext, so there is deliberately no
+# `main = ".open-next/worker.js"` entry, and there are no Worker `routes`:
+# the custom domain (intellihire.is-a.dev) is attached to the Pages project
+# in the Cloudflare dashboard (Pages -> Custom domains), not via wrangler
+# Worker routes. These bindings are read by `wrangler pages dev/deploy`.
 
 # D1 Database
 [[d1_databases]]
@@ -9,12 +18,16 @@ binding = "DB"
 database_name = "intellihire_db"
 database_id = "a73d035b-1328-4eee-8e94-91db4c78f0f2"
 
-# R2 Object Storage
+# R2 Object Storage (declared for future object-backed uploads).
+# NOTE: R2 is NOT yet enabled on the account. Until it is, uploaded files are
+# persisted as base64 in D1 (documents.file_data) behind StorageDriver
+# (see src/lib/db.ts and src/app/api/upload/route.ts). Enabling R2 is a
+# dashboard/billing toggle and does not change current upload behavior.
 [[r2_buckets]]
 binding = "BUCKET"
 bucket_name = "intellihire-uploads"
 
-# KV Namespaces
+# KV Namespaces (sessions / auth rate limiting)
 [[kv_namespaces]]
 binding = "SESSION_STORE"
 id = "2fb07ec6e55048d4880d24dd9e4b6c8f"
@@ -23,7 +36,4 @@ id = "2fb07ec6e55048d4880d24dd9e4b6c8f"
 [ai]
 binding = "AI"
 
-# Routes / Domain
-routes = [
-  { pattern = "intellihire.is-a.dev/*", zone_name = "is-a.dev" }
-]
+# Pages-level secrets / local dev variables live in .dev.vars (gitignored).

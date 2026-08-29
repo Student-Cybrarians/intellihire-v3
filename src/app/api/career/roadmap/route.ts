@@ -4,6 +4,7 @@ import { requestDb } from "@/lib/db";
 import { z } from "zod";
 
 export const dynamic = "force-dynamic";
+export const runtime = "edge";
 
 const milestoneSchema = z.object({
   title: z.string().min(3),

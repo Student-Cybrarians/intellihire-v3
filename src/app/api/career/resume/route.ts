@@ -5,6 +5,7 @@ import { askAI, isFallback } from "@/lib/ai";
 import { z } from "zod";
 
 export const dynamic = "force-dynamic";
+export const runtime = "edge";
 
 const resumeAnalysisSchema = z.object({
   fileName: z.string(),

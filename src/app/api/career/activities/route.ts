@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { requestDb } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
+export const runtime = "edge";
 
 export async function GET() {
   try {

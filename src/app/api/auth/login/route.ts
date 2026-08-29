@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import bcrypt from "bcryptjs";
 import { requestDb } from "@/lib/db";
-import { comparePassword, createToken, SESSION_COOKIE_NAME } from "@/lib/auth";
+import { comparePassword, createToken, hashPassword, SESSION_COOKIE_NAME } from "@/lib/auth";
 import { clientIp, isThrottled, throttleRetryAfter, recordFailure, recordSuccess } from "@/lib/rate-limit";
+export const runtime = "edge";
 
 const loginSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -13,11 +13,13 @@ const loginSchema = z.object({
 const SESSION_MAX_AGE_SECONDS = 24 * 60 * 60; // match 24h token expiry
 
 /**
- * Pre-computed cost-matching bcrypt hash used only to equalize the timing
- * between "user not found" and "wrong password" so the endpoint does not leak
- * account existence through response latency.
+ * Cost-matching PBKDF2 hash burn used only to equalize the timing between
+ * "user not found" and "wrong password" so the endpoint does not leak account
+ * existence through response latency. Deliberately discards the result.
  */
-const DUMMY_HASH = bcrypt.hashSync("intellihire-timing-equalizer", 12);
+async function burnPasswordHash(): Promise<void> {
+  await hashPassword("intellihire-timing-equalizer");
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -44,13 +46,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Find user by email; always run a bcrypt compare to keep timing uniform.
+    // Find user by email; always run a cost-matching password hash to keep
+    // timing uniform between "user not found" and "wrong password".
     const user = await db.findUserByEmail(email);
     const passwordMatches = user !== null && (await comparePassword(password, user.passwordHash));
     if (user === null) {
-      // No such account: burn a cost-matching compare so the endpoint does not
+      // No such account: burn a cost-matching hash so the endpoint does not
       // reveal account existence through response latency.
-      await comparePassword(password, DUMMY_HASH);
+      await burnPasswordHash();
     }
 
     if (!user || !passwordMatches) {
@@ -64,7 +67,7 @@ export async function POST(req: NextRequest) {
     await recordSuccess("login", ip, email);
 
     // Create session token
-    const token = createToken({
+    const token = await createToken({
       userId: user.id,
       email: user.email,
       name: user.name,

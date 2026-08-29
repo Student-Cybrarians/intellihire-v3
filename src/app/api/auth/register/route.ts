@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requestDb } from "@/lib/db";
 import { hashPassword, createToken, SESSION_COOKIE_NAME } from "@/lib/auth";
 import { clientIp, isThrottled, throttleRetryAfter, recordFailure, recordSuccess } from "@/lib/rate-limit";
+export const runtime = "edge";
 
 /**
  * Registration schema. Deliberately has NO `role` field: the server always
@@ -65,7 +66,7 @@ export async function POST(req: NextRequest) {
     await recordSuccess("register", ip, email);
 
     // Create session token
-    const token = createToken({
+    const token = await createToken({
       userId: user.id,
       email: user.email,
       name: user.name,

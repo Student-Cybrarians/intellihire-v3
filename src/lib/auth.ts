@@ -1,6 +1,5 @@
 import { cookies } from "next/headers";
-import jwt from "jsonwebtoken";
-import bcrypt from "bcryptjs";
+import { SignJWT, jwtVerify } from "jose";
 import { currentCloudflareEnv, requestDb, requestKv } from "./db";
 import type { UserRecord, KvStore } from "./db";
 
@@ -12,8 +11,37 @@ import type { UserRecord, KvStore } from "./db";
 const JWT_EXPIRES_IN = "24h";
 const SESSION_TTL_SECONDS = 24 * 60 * 60;
 
-/** bcrypt work factor for password hashing. */
-const BCRYPT_COST = 12;
+/**
+ * HMAC-SHA-256 signature algorithm for session JWTs. `jose` runs on WebCrypto,
+ * so it is fully Cloudflare-Pages/edge compatible (no Node builtins).
+ */
+const JWT_ALG = "HS256";
+
+// ---------------------------------------------------------------------------
+// Password hashing (WebCrypto PBKDF2-HMAC-SHA-256)
+//
+// bcrypt was replaced with an edge-safe, self-describing PBKDF2 scheme because
+// `bcryptjs` pulls in Node-only `crypto.randomBytes`. Iteration count, salt and
+// derived key are all embedded in the stored string so hashes stay portable
+// across environments and can be re-derived on verify.
+// ---------------------------------------------------------------------------
+
+/** PBKDF2-HMAC-SHA-256 work factor. 100k iterations matches modern guidance. */
+const PBKDF2_ITERATIONS = 100_000;
+/** Random salt length in bytes (16 => 128-bit salt). */
+const SALT_BYTES = 16;
+/** Output key length in bytes (32 => 256-bit derived key). */
+const KEY_BYTES = 32;
+const HASH_ALG = "SHA-256";
+
+/**
+ * Stored hash format (self-describing):
+ *   `pbkdf2$<iterations>$<saltB64>$<derivedB64>`
+ */
+const HASH_PREFIX = "pbkdf2";
+
+/** Minimum accepted password length. Kept at 8; enforced by zod in the API. */
+export const PASSWORD_MIN_LENGTH = 8;
 
 export const SESSION_COOKIE_NAME = "intellihire_session";
 
@@ -144,26 +172,102 @@ export async function revokeCurrentSession(): Promise<string | null> {
   const cookieStore = cookies();
   const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
   if (!token) return null;
-  const decoded = decodeAndVerifyToken(token);
+  const decoded = await decodeAndVerifyToken(token);
   if (!decoded?.jti) return null;
   await revokeSessionJti(decoded.jti);
   return decoded.jti;
 }
 
-export async function hashPassword(password: string): Promise<string> {
-  const salt = await bcrypt.genSalt(BCRYPT_COST);
-  return bcrypt.hash(password, salt);
+// ---------------------------------------------------------------------------
+// Password hashing & verification (edge-safe PBKDF2)
+// ---------------------------------------------------------------------------
+
+/** Constant-time byte comparison (side-channel safe, no Node `crypto` needed). */
+function timingSafeEqualBytes(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
+  return diff === 0;
 }
 
-export async function comparePassword(password: string, hash: string): Promise<boolean> {
-  return bcrypt.compare(password, hash);
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary);
 }
+
+function base64ToBytes(b64: string): Uint8Array {
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+async function deriveKey(password: string, salt: Uint8Array, iterations: number): Promise<Uint8Array> {
+  const baseKey = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(password),
+    "PBKDF2",
+    false,
+    ["deriveBits"]
+  );
+  const bits = await crypto.subtle.deriveBits(
+    { name: "PBKDF2", hash: HASH_ALG, salt: salt as BufferSource, iterations },
+    baseKey,
+    KEY_BYTES * 8
+  );
+  return new Uint8Array(bits);
+}
+
+/** Hash a password with PBKDF2-HMAC-SHA-256 into a self-describing string. */
+export async function hashPassword(password: string): Promise<string> {
+  const salt = crypto.getRandomValues(new Uint8Array(SALT_BYTES));
+  const derived = await deriveKey(password, salt, PBKDF2_ITERATIONS);
+  return `${HASH_PREFIX}$${PBKDF2_ITERATIONS}$${bytesToBase64(salt)}$${bytesToBase64(derived)}`;
+}
+
+/**
+ * Verify a password against a stored hash by re-deriving from the stored
+ * salt/cost and comparing in constant time. Fails closed on malformed hashes.
+ */
+export async function verifyPassword(password: string, stored: string): Promise<boolean> {
+  const parts = stored.split("$");
+  if (parts.length !== 4 || parts[0] !== HASH_PREFIX) return false;
+  const iterations = Number(parts[1]);
+  if (!Number.isInteger(iterations) || iterations <= 0) return false;
+  let salt: Uint8Array;
+  let expected: Uint8Array;
+  try {
+    salt = base64ToBytes(parts[2]);
+    expected = base64ToBytes(parts[3]);
+  } catch {
+    return false;
+  }
+  if (salt.length === 0 || expected.length === 0) return false;
+  const derived = await deriveKey(password, salt, iterations);
+  return timingSafeEqualBytes(derived, expected);
+}
+
+/**
+ * Backward-compatible alias for `verifyPassword`, retained so the login
+ * handler's awkwardly-named call site reads the same as before the bcrypt-jose
+ * migration.
+ */
+export const comparePassword = verifyPassword;
+
+// ---------------------------------------------------------------------------
+// Token signing & verification (jose / WebCrypto)
+// ---------------------------------------------------------------------------
 
 /** Sign a session token with a random `jti` for per-session revocation. */
-export function createToken(payload: SessionPayload): string {
-  return jwt.sign({ ...payload, jti: crypto.randomUUID() }, requireJwtSecret(), {
-    expiresIn: JWT_EXPIRES_IN,
-  });
+export async function createToken(payload: SessionPayload): Promise<string> {
+  const key = new TextEncoder().encode(requireJwtSecret());
+  return new SignJWT({ ...payload })
+    .setProtectedHeader({ alg: JWT_ALG })
+    .setIssuedAt()
+    .setExpirationTime(JWT_EXPIRES_IN)
+    .setJti(crypto.randomUUID())
+    .sign(key);
 }
 
 /**
@@ -171,15 +275,17 @@ export function createToken(payload: SessionPayload): string {
  * internal `jti`/`iat`/`exp` claims. Session-level checks (revocation, expiry)
  * are applied in `getSession`, which is the path used by the API.
  */
-export function verifyToken(token: string): SessionPayload | null {
-  const decoded = decodeAndVerifyToken(token);
+export async function verifyToken(token: string): Promise<SessionPayload | null> {
+  const decoded = await decodeAndVerifyToken(token);
   if (!decoded) return null;
   return { userId: decoded.userId, email: decoded.email, name: decoded.name, role: decoded.role };
 }
 
-function decodeAndVerifyToken(token: string): DecodedToken | null {
+async function decodeAndVerifyToken(token: string): Promise<DecodedToken | null> {
   try {
-    return jwt.verify(token, requireJwtSecret()) as DecodedToken;
+    const key = new TextEncoder().encode(requireJwtSecret());
+    const { payload } = await jwtVerify(token, key, { algorithms: [JWT_ALG] });
+    return payload as unknown as DecodedToken;
   } catch {
     return null;
   }
@@ -189,7 +295,7 @@ export async function getSession(): Promise<SessionPayload | null> {
   const cookieStore = cookies();
   const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
   if (!token) return null;
-  const decoded = decodeAndVerifyToken(token);
+  const decoded = await decodeAndVerifyToken(token);
   if (!decoded) return null;
   // Reject tokens whose jti has been revoked (logout) before accepting the session.
   if (decoded.jti && (await isJtiRevoked(decoded.jti))) return null;

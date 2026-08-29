@@ -3,6 +3,7 @@ import { requestDb } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
+export const runtime = "edge";
 
 /**
  * Upload endpoint.
@@ -33,6 +34,19 @@ const ALLOWED_MIME_TYPES = new Set([
 const MAX_DECODED_BYTES = 5 * 1024 * 1024;
 
 const BASE64_RE = /^[A-Za-z0-9+/]*={0,2}$/;
+
+/**
+ * Number of decoded bytes for a (already validated) base64 string. Avoids
+ * `Buffer`/`atob` so the route stays Cloudflare-Pages/edge compatible: the
+ * decoded size is `ceil(base64len * 3/4)` minus padding. Only called after
+ * `BASE64_RE` validates that the string is well-formed base64.
+ */
+function decodedBase64Bytes(b64: string): number {
+  let padding = 0;
+  if (b64.endsWith("==")) padding = 2;
+  else if (b64.endsWith("=")) padding = 1;
+  return Math.floor((b64.length * 3) / 4) - padding;
+}
 
 /** Strip path components and control characters from a client-supplied name. */
 function sanitizeFileName(raw: string): string {
@@ -81,8 +95,7 @@ export async function POST(req: Request) {
     }
 
     // Measure the decoded size server-side; never trust client `fileSize`.
-    const decoded = Buffer.from(fileData, "base64");
-    const decodedBytes = decoded.length;
+    const decodedBytes = decodedBase64Bytes(fileData);
     if (decodedBytes === 0) {
       return NextResponse.json({ error: "File is empty" }, { status: 400 });
     }

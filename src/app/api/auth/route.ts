@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession, SESSION_COOKIE_NAME, revokeCurrentSession } from "@/lib/auth";
 import { POST as loginPOST } from "./login/route";
+export const runtime = "edge";
 
 export async function GET() {
   try {

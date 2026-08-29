@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { SESSION_COOKIE_NAME, revokeCurrentSession } from "@/lib/auth";
+export const runtime = "edge";
 
 export async function POST() {
   // Blacklist the current token's jti (KV-backed) so it cannot be replayed,
