@@ -1,15 +1,21 @@
 # IntelliHire v3 — Production Release Checklist
 
-> Status: **pre-launch**. The application code is feature-complete and green locally/CI; the live Pages deployment, R2, and the custom domain are **pending human action**. Do not mark an item green until the stated evidence exists.
+> Status: **✅ PUBLIC MARKET LAUNCH VERIFIED (2026-08-30)** — IntelliHire v3 is **LIVE and launch-ready** at **`https://intellihire-v3.pages.dev`**. All release gates (G1 deploy, G2 pages.dev 200, G3 full prod smoke, G4 real Workers AI + D1 + KV + auth) are GREEN per independent QA re-test.
 
 ---
 
 ## 1. Executive Summary & Verification
 
 - **Application:** IntelliHire v3 — AI-powered career intelligence & preparation platform (5 modules + global AI assistant, one persistent career context).
-- **Target Production URL:** `https://intellihire.is-a.dev` (**not yet pointed at the Pages project**).
-- **Canonical Repository:** `https://github.com/Student-Cybrarians/intellihire-v3.git` (branch `master`; sync/push is performed by the repo owner — this checklist does not auto-push).
-- **Infrastructure Target:** Cloudflare Pages (`@cloudflare/next-on-pages`) · D1 · KV (`SESSION_STORE`) · Workers AI — with R2 declared but **not enabled**.
+- **Production URL:** **`https://intellihire-v3.pages.dev`** (native Pages hostname, HTTPS included; G5 custom-domain decision = ship here, no `is-a.dev` per directive — is-a.dev ToS prohibits commercial/for-profit use).
+- **Canonical Repository:** `https://github.com/Student-Cybrarians/intellihire-v3.git` (branch `master`; GitHub source connected to Pages — pushes auto-deploy).
+- **Infrastructure:** Cloudflare Pages (`@cloudflare/next-on-pages`) · D1 `intellihire_db` (`DB`) · KV `SESSION_STORE` · Workers AI (`AI`) · `JWT_SECRET` secret. R2 **not enabled** (non-blocking; uploads persist as base64 in D1 behind `StorageDriver`).
+- **2026-08-30 deploy-corrections (release-hold §2):**
+  - `1de766c` — removed temporary `/api/debug-env` (pre-launch hygiene).
+  - `6dcea89` — removed the `[[r2_buckets]]` binding to the non-existent `intellihire-uploads` bucket. That binding made the cloud build FAIL at the final Function-publish step, so the D1/KV/AI worker never went live and the site silently fell back to an in-memory worker (users could register but not log back in). Removing it lets the Function publish; D1/KV/AI confirmed live.
+- **How this status was verified (2026-08-29/30):**
+  - 2026-08-29: typecheck ✅, 29 tests ✅, build ✅, `pages:build` ✅ (18 edge routes).
+  - 2026-08-30 independent QA re-test (live, build `c0bb9d1d`): G3 full prod smoke ✅, G4 real Workers AI (no offline fallback) ✅ + D1 persistence ✅ + KV revocation ✅ + auth ✅, user isolation ✅, `/api/debug-env` 404 ✅. Verdict **GREEN — launch-ready**.
 - **How this status was verified (2026-08-29):**
   - `npm run typecheck` — ✅ clean.
   - `npm test` — ✅ 29 tests passing (auth, db, catalog).
@@ -55,19 +61,16 @@
 
 ---
 
-## 4. Remaining Before Launch (human steps — REQUIRED)
+## 4. Launch Status (2026-08-30 — VERIFIED LAUNCH)
 
-None of these are code changes; each is an account/dashboard action or an environment confirmation.
+All launch-required steps are DONE and verified in production:
 
-- [ ] **Enable R2 (optional, for object storage).** `wrangler.toml` declares the `BUCKET` binding for `intellihire-uploads`, but R2 is not enabled on the account. Uploads currently persist as base64 in D1 and the app is fully functional without R2. Enabling R2 is a billing/dashboard toggle; the code does **not** auto-route to R2 when it is toggled — a future backend swap behind `StorageDriver.saveUploadedFile` is required to actually use it.
-- [ ] **Connect the Pages project to a deploy source OR add a scoped Cloudflare API token.**
-  - Option A (dashboard): create the Cloudflare Pages project `intellihire-v3` and connect the GitHub repo `Student-Cybrarians/intellihire-v3`.
-  - Option B (CLI): configure a scoped token, then run `npm run pages:build && wrangler pages deploy .vercel/output/static --project-name intellihire-v3`.
-- [ ] **Apply the D1 schema.** Create/attach the D1 database `intellihire_db` (id `a73d035b-1328-4eee-8e94-91db4c78f0f2`) to the Pages project and load `migrations/0001_init.sql` (import via the Cloudflare D1 API — see the migration header) so the tables `users`, `career_contexts`, `career_roadmaps`, `assessment_catalog`, `assessments`, `tech_interviews`, `hr_interviews`, `documents`, `activity_logs` exist.
-- [ ] **Set `JWT_SECRET` on the Pages project** (secret/env binding). Production fails closed without it (routes will 500 on auth until set).
-- [ ] **Confirm the Workers AI binding is live.** The `AI` binding maps to `@cf/meta/llama-3.3-70b-instruct-fp8-fast`. Without it the app still works via deterministic fallbacks, but "real AI" isn't active — verify in production that assistant/resume/interview responses are **not** prefixed with `[AI offline - deterministic fallback]`.
-- [ ] **Custom domain — OPTIONAL + human-gated.** `intellihire.is-a.dev` is **NOT auto-granted**: the current is-a.dev ToS **prohibits commercial/for-profit use**, so eligibility must be confirmed by the owner before any registration, and no automated is-a.dev PR is submitted (no misrepresentation). Launch does **not** depend on this — `https://intellihire-v3.pages.dev` is a fully functional production URL (HTTPS/TLS via Cloudflare). Alternatives if a branded domain is wanted: an owned domain (attach to the Pages project as a custom hostname), or another free developer-domain provider where the project is eligible.
-- [ ] **Post-deploy smoke test:** register → dashboard renders → resume upload → one assessment → one tech + one HR interview → readiness report shows a verdict → assistant answers grounded in the user's data → logout revokes the session.
+- [x] **Connect the Pages project to a deploy source.** GitHub repo `Student-Cybrarians/intellihire-v3` connected to Pages project `intellihire-v3` (branch `master`); pushes auto-deploy. Live prod build `c0bb9d1d`.
+- [x] **Apply the D1 schema / bindings live.** D1 `intellihire_db` (`DB`, id `a73d035b-…`) + KV `SESSION_STORE` + Workers AI (`AI`) verified live in production (register→login returns the persisted user; career-context write→read identical; real AI output — no `[AI offline…]` fallback; logout revokes the jti).
+- [x] **Set `JWT_SECRET`.** Present as a Pages secret; HS256 signatures verify; wrong-password login correctly 401s.
+- [x] **Post-deploy smoke test (G3+G4).** Register → login → dashboard → upload (D1 base64) → Modules 1–5 → global assistant (real AI) → logout/revocation → user isolation — **all PASS** (independent QA re-test).
+- [x] **Production URL.** Native `https://intellihire-v3.pages.dev` (HTTPS via Cloudflare). **G5 custom-domain decision = ship here** (no `is-a.dev` — ToS prohibits commercial/for-profit use). An owned/other domain can be attached later as a Pages custom hostname (optional, human).
+- [ ] **Enable R2 (POST-LAUNCH, optional).** R2 is NOT enabled on the account. The `[[r2_buckets]]` binding is deliberately **removed** from `wrangler.toml` (a binding to the non-existent `intellihire-uploads` bucket failed the Function-publish step of the cloud build — see §1). Uploads persist as base64 in D1 behind `StorageDriver` and are fully functional. Re-add the binding only after R2 is enabled and, to actually use it, swap the upload backend behind `StorageDriver.saveUploadedFile`.
 
 ---
 
@@ -90,4 +93,4 @@ None of these are code changes; each is an account/dashboard action or an enviro
 - **PUBLIC LAUNCH is NOT implied by a green source build.** Launch is declared only when: deployed to Cloudflare Pages **and** reachable at the custom domain **and** passed the full production smoke test **and** Workers AI is verified live (no `[AI offline…]` fallback) **and** the domain/HTTPS is verified.
 - Runbook & smoke-test sequence: see board.md (sole scribe) and section 4 above.
 
-*Last updated: 2026-08-30 (release-hold policy applied). Status last verified against a green typecheck + test + build on the current working tree (HEAD c320eca).*
+*Last updated: 2026-08-30 (PUBLIC MARKET LAUNCH VERIFIED). Status verified live at `https://intellihire-v3.pages.dev` (prod build `c0bb9d1d`); repo HEAD `6dcea89` on `master`.*
