@@ -81,4 +81,13 @@ None of these are code changes; each is an account/dashboard action or an enviro
 
 ---
 
-*Last updated: 2026-08-29. Status last verified against a green typecheck + test + build on the current working tree.*
+---
+
+## 6. Release-Hold Policy (2026-08-30, human directive)
+
+- Release candidate has passed **independent QA** (verdict: READY, conditional on deploy steps). Engineering is frozen — **do not modify the verified candidate** without a concrete defect or a required deployment correction.
+- **R2 is NON-BLOCKING.** The PRD does not require R2 for launch and uploads are fully functional as base64 in D1. R2 stays on the deferred backlog (section 5).
+- **PUBLIC LAUNCH is NOT implied by a green source build.** Launch is declared only when: deployed to Cloudflare Pages **and** reachable at the custom domain **and** passed the full production smoke test **and** Workers AI is verified live (no `[AI offline…]` fallback) **and** the domain/HTTPS is verified.
+- Runbook & smoke-test sequence: see board.md (sole scribe) and section 4 above.
+
+*Last updated: 2026-08-30 (release-hold policy applied). Status last verified against a green typecheck + test + build on the current working tree (HEAD c320eca).*
