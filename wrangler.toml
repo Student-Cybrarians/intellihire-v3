@@ -2,6 +2,11 @@ name = "intellihire-v3"
 compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
 
+# Cloudflare Pages reads this wrangler.toml to apply the D1/KV/AI/R2 bindings
+# declared below to production/preview builds. Declaring the build output dir
+# makes Pages honour the file (and its bindings) in the cloud (GitHub) build.
+pages_build_output_dir = ".vercel/output/static"
+
 # Deployment target: Cloudflare Pages via @cloudflare/next-on-pages.
 #   npm run pages:build   ->  npx @cloudflare/next-on-pages  (emits .vercel/output/static)
 #   npm run deploy        ->  wrangler pages deploy .vercel/output/static
