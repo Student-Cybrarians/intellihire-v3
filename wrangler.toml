@@ -23,14 +23,17 @@ binding = "DB"
 database_name = "intellihire_db"
 database_id = "a73d035b-1328-4eee-8e94-91db4c78f0f2"
 
-# R2 Object Storage (declared for future object-backed uploads).
-# NOTE: R2 is NOT yet enabled on the account. Until it is, uploaded files are
-# persisted as base64 in D1 (documents.file_data) behind StorageDriver
-# (see src/lib/db.ts and src/app/api/upload/route.ts). Enabling R2 is a
-# dashboard/billing toggle and does not change current upload behavior.
-[[r2_buckets]]
-binding = "BUCKET"
-bucket_name = "intellihire-uploads"
+# R2 Object Storage (NOT declared here — see note).
+# R2 is NOT enabled on this account, and a [[r2_buckets]] binding to a
+# non-existent bucket made the Cloudflare Pages cloud build FAIL to publish
+# the Function (error: "R2 bucket 'intellihire-uploads' not found"), which
+# silently dropped the D1/KV/AI bindings and left the app on in-memory
+# fallback. Uploads are NON-BLOCKING for launch: files persist as base64 in
+# D1 (documents.file_data) behind StorageDriver (src/lib/db.ts). Re-add this
+# block ONLY after R2 is enabled on the account:
+#   [[r2_buckets]]
+#   binding = "BUCKET"
+#   bucket_name = "intellihire-uploads"
 
 # KV Namespaces (sessions / auth rate limiting)
 [[kv_namespaces]]
