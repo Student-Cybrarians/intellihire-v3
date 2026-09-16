@@ -21,7 +21,7 @@ The platform is organized around eight product layers/components:
 7. **Module 4 — AI HR Interview + Behavioral Analysis** — HR interview simulation, communication/behavioral evaluation and feedback.
 8. **Module 5 — AI Hiring Committee & Candidate Readiness** — holistic aggregation of evidence, gap analysis, readiness and next-step recommendations.
 
-### Core product principle
+### Core Product Principle
 
 **One user. One persistent career context. Five specialized modules. One global AI assistant.**
 

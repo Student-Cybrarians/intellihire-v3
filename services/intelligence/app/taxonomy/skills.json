@@ -1,0 +1,220 @@
+{
+  "skills": [
+    {
+      "id": "skill_python",
+      "name": "Python",
+      "aliases": ["python3", "python 3", "py", "cpython"],
+      "category": "Languages",
+      "domain": "Software Engineering & Data",
+      "parent_id": "cat_languages"
+    },
+    {
+      "id": "skill_javascript",
+      "name": "JavaScript",
+      "aliases": ["js", "es6", "ecmascript", "vanilla js"],
+      "category": "Languages",
+      "domain": "Frontend & Web",
+      "parent_id": "cat_languages"
+    },
+    {
+      "id": "skill_typescript",
+      "name": "TypeScript",
+      "aliases": ["ts", "typescript 5"],
+      "category": "Languages",
+      "domain": "Software Engineering",
+      "parent_id": "cat_languages"
+    },
+    {
+      "id": "skill_go",
+      "name": "Go",
+      "aliases": ["golang", "go-lang"],
+      "category": "Languages",
+      "domain": "Backend & Cloud",
+      "parent_id": "cat_languages"
+    },
+    {
+      "id": "skill_cpp",
+      "name": "C++",
+      "aliases": ["cpp", "c/c++", "c plus plus", "modern c++"],
+      "category": "Languages",
+      "domain": "Systems & Performance",
+      "parent_id": "cat_languages"
+    },
+    {
+      "id": "skill_rust",
+      "name": "Rust",
+      "aliases": ["rust-lang", "rustlang"],
+      "category": "Languages",
+      "domain": "Systems & WebAssembly",
+      "parent_id": "cat_languages"
+    },
+    {
+      "id": "skill_react",
+      "name": "React",
+      "aliases": ["reactjs", "react.js", "react 18", "react native"],
+      "category": "Frameworks",
+      "domain": "Frontend",
+      "parent_id": "cat_frameworks"
+    },
+    {
+      "id": "skill_nextjs",
+      "name": "Next.js",
+      "aliases": ["next.js", "nextjs", "next 14", "next 15", "app router"],
+      "category": "Frameworks",
+      "domain": "Full Stack",
+      "parent_id": "cat_frameworks"
+    },
+    {
+      "id": "skill_fastapi",
+      "name": "FastAPI",
+      "aliases": ["fast-api", "fastapi framework"],
+      "category": "Frameworks",
+      "domain": "Backend & AI",
+      "parent_id": "cat_frameworks"
+    },
+    {
+      "id": "skill_nodejs",
+      "name": "Node.js",
+      "aliases": ["nodejs", "node", "node.js runtime"],
+      "category": "Runtimes",
+      "domain": "Backend",
+      "parent_id": "cat_runtimes"
+    },
+    {
+      "id": "skill_postgresql",
+      "name": "PostgreSQL",
+      "aliases": ["postgres", "pgsql", "psql"],
+      "category": "Databases",
+      "domain": "Relational Data",
+      "parent_id": "cat_databases"
+    },
+    {
+      "id": "skill_sqlite_d1",
+      "name": "SQLite / Cloudflare D1",
+      "aliases": ["sqlite", "d1", "cloudflare d1", "sqlite3"],
+      "category": "Databases",
+      "domain": "Edge Databases",
+      "parent_id": "cat_databases"
+    },
+    {
+      "id": "skill_redis",
+      "name": "Redis",
+      "aliases": ["redis kv", "redis-server", "valkey"],
+      "category": "Databases & Caching",
+      "domain": "In-Memory Systems",
+      "parent_id": "cat_databases"
+    },
+    {
+      "id": "skill_qdrant",
+      "name": "Qdrant",
+      "aliases": ["qdrant vector db", "qdrant vector search"],
+      "category": "Vector Databases",
+      "domain": "AI & RAG",
+      "parent_id": "cat_databases"
+    },
+    {
+      "id": "skill_docker",
+      "name": "Docker",
+      "aliases": ["docker containers", "containerization", "docker-compose"],
+      "category": "DevOps & Cloud",
+      "domain": "Infrastructure",
+      "parent_id": "cat_devops"
+    },
+    {
+      "id": "skill_kubernetes",
+      "name": "Kubernetes",
+      "aliases": ["k8s", "kube", "kubectl"],
+      "category": "DevOps & Cloud",
+      "domain": "Container Orchestration",
+      "parent_id": "cat_devops"
+    },
+    {
+      "id": "skill_cloudflare",
+      "name": "Cloudflare Workers & Pages",
+      "aliases": ["cloudflare workers", "cloudflare pages", "cloudflare edge", "wrangler"],
+      "category": "Cloud & Edge",
+      "domain": "Serverless",
+      "parent_id": "cat_cloud"
+    },
+    {
+      "id": "skill_aws",
+      "name": "Amazon Web Services (AWS)",
+      "aliases": ["aws", "amazon web services", "ec2", "s3", "lambda", "ecs"],
+      "category": "Cloud & Edge",
+      "domain": "Cloud Infrastructure",
+      "parent_id": "cat_cloud"
+    },
+    {
+      "id": "skill_scikit_learn",
+      "name": "scikit-learn",
+      "aliases": ["sklearn", "scikit learn", "scikit-learn library"],
+      "category": "Machine Learning",
+      "domain": "Data Science & AI",
+      "parent_id": "cat_ai_ml"
+    },
+    {
+      "id": "skill_transformers",
+      "name": "Transformers & HuggingFace",
+      "aliases": ["huggingface", "sentence-transformers", "transformers", "bert"],
+      "category": "Natural Language Processing",
+      "domain": "Data Science & AI",
+      "parent_id": "cat_ai_ml"
+    },
+    {
+      "id": "skill_spacy",
+      "name": "spaCy",
+      "aliases": ["spacy", "spacy ner"],
+      "category": "Natural Language Processing",
+      "domain": "NLP & Information Extraction",
+      "parent_id": "cat_ai_ml"
+    },
+    {
+      "id": "skill_rag",
+      "name": "RAG (Retrieval-Augmented Generation)",
+      "aliases": ["rag", "retrieval augmented generation", "vector search", "dense retrieval"],
+      "category": "AI Architecture",
+      "domain": "AI & Search",
+      "parent_id": "cat_ai_ml"
+    },
+    {
+      "id": "skill_shap_explainability",
+      "name": "SHAP & Model Explainability",
+      "aliases": ["shap", "shapley values", "treeshap", "xai", "explainable ai"],
+      "category": "AI Governance",
+      "domain": "Model Ethics & Compliance",
+      "parent_id": "cat_ai_ml"
+    },
+    {
+      "id": "skill_fairlearn",
+      "name": "Fairlearn & Bias Auditing",
+      "aliases": ["fairlearn", "disparate impact audit", "four-fifths rule", "algorithmic fairness"],
+      "category": "AI Governance",
+      "domain": "Compliance & Ethics",
+      "parent_id": "cat_ai_ml"
+    },
+    {
+      "id": "skill_dsa",
+      "name": "Data Structures & Algorithms",
+      "aliases": ["dsa", "algorithms", "data structures", "dynamic programming", "graphs", "trees"],
+      "category": "Foundations",
+      "domain": "Computer Science",
+      "parent_id": "cat_foundations"
+    },
+    {
+      "id": "skill_system_design",
+      "name": "System Design & Distributed Systems",
+      "aliases": ["system design", "distributed systems", "microservices", "high availability", "scalability"],
+      "category": "Architecture",
+      "domain": "Software Architecture",
+      "parent_id": "cat_foundations"
+    },
+    {
+      "id": "skill_cybersecurity",
+      "name": "Application Security & OWASP",
+      "aliases": ["appsec", "owasp top 10", "penetration testing", "threat modeling", "cybersecurity", "rbac"],
+      "category": "Security",
+      "domain": "Information Security",
+      "parent_id": "cat_security"
+    }
+  ]
+}

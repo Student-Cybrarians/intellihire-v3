@@ -1,0 +1,69 @@
+name = "intellihire-v3"
+main = ".next/standalone/server.js"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+NEXT_PUBLIC_APP_NAME = "IntelliHire v3"
+NEXT_PUBLIC_APP_VERSION = "3.0.0"
+ENABLE_EDGE_TELEMETRY = "true"
+DR_FAILOVER_ACTIVE = "false"
+PRIMARY_REGION = "auto"
+DR_SECONDARY_REGION = "wnam"
+
+# -------------------------------------------------------------
+# Cloudflare D1 Relational Persistence & Disaster Recovery
+# -------------------------------------------------------------
+[[d1_databases]]
+binding = "DB"
+database_name = "intellihire-db-prod"
+database_id = "d1-prod-intellihire-v3-primary"
+migrations_dir = "migrations"
+
+[[d1_databases]]
+binding = "DB_DR_REPLICA"
+database_name = "intellihire-db-dr"
+database_id = "d1-dr-intellihire-v3-secondary"
+migrations_dir = "migrations"
+
+# -------------------------------------------------------------
+# Cloudflare KV Edge State & Rate Limiting
+# -------------------------------------------------------------
+[[kv_namespaces]]
+binding = "SESSION_KV"
+id = "kv-session-cache-prod"
+
+[[kv_namespaces]]
+binding = "RATE_LIMIT_KV"
+id = "kv-ratelimit-prod"
+
+# -------------------------------------------------------------
+# Cloudflare R2 Object Storage & Cold Backup Vault
+# -------------------------------------------------------------
+[[r2_buckets]]
+binding = "RESUME_STORAGE"
+bucket_name = "intellihire-resumes-prod"
+
+[[r2_buckets]]
+binding = "BACKUP_STORAGE"
+bucket_name = "intellihire-backups-vault"
+
+[env]
+INTELLIGENCE_SERVICE_URL = "http://127.0.0.1:8000"
+ENVIRONMENT = "development"
+
+[env.production]
+INTELLIGENCE_SERVICE_URL = "https://intelligence-service.is-a.dev"
+ENVIRONMENT = "production"
+DR_FAILOVER_ACTIVE = "false"
+
+[env.dr]
+INTELLIGENCE_SERVICE_URL = "https://intelligence-service-dr.is-a.dev"
+ENVIRONMENT = "disaster_recovery"
+DR_FAILOVER_ACTIVE = "true"
+
+[build]
+command = "npm run build"
+
+[site]
+bucket = ".next/static"

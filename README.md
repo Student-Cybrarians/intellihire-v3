@@ -1,0 +1,1 @@
+The IntelliHire v3 database schema has been updated to include new tables and indexes for assessment telemetry, coding submissions, and fairness audits.
