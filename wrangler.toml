@@ -1,47 +1,69 @@
 name = "intellihire-v3"
+main = ".next/standalone/server.js"
 compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
 
-# Cloudflare Pages reads this wrangler.toml to apply the D1/KV/AI/R2 bindings
-# declared below to production/preview builds. Declaring the build output dir
-# makes Pages honour the file (and its bindings) in the cloud (GitHub) build.
-pages_build_output_dir = ".vercel/output/static"
+[vars]
+NEXT_PUBLIC_APP_NAME = "IntelliHire v3"
+NEXT_PUBLIC_APP_VERSION = "3.0.0"
+ENABLE_EDGE_TELEMETRY = "true"
+DR_FAILOVER_ACTIVE = "false"
+PRIMARY_REGION = "auto"
+DR_SECONDARY_REGION = "wnam"
 
-# Deployment target: Cloudflare Pages via @cloudflare/next-on-pages.
-#   npm run pages:build   ->  npx @cloudflare/next-on-pages  (emits .vercel/output/static)
-#   npm run deploy        ->  wrangler pages deploy .vercel/output/static
-#
-# NOTE: this project does NOT use OpenNext, so there is deliberately no
-# `main = ".open-next/worker.js"` entry, and there are no Worker `routes`:
-# the custom domain (intellihire.is-a.dev) is attached to the Pages project
-# in the Cloudflare dashboard (Pages -> Custom domains), not via wrangler
-# Worker routes. These bindings are read by `wrangler pages dev/deploy`.
-
-# D1 Database
+# -------------------------------------------------------------
+# Cloudflare D1 Relational Persistence & Disaster Recovery
+# -------------------------------------------------------------
 [[d1_databases]]
 binding = "DB"
-database_name = "intellihire_db"
-database_id = "a73d035b-1328-4eee-8e94-91db4c78f0f2"
+database_name = "intellihire-db-prod"
+database_id = "d1-prod-intellihire-v3-primary"
+migrations_dir = "migrations"
 
-# R2 Object Storage (NOT declared here — see note).
-# R2 is NOT enabled on this account, and a [[r2_buckets]] binding to a
-# non-existent bucket made the Cloudflare Pages cloud build FAIL to publish
-# the Function (error: "R2 bucket 'intellihire-uploads' not found"), which
-# silently dropped the D1/KV/AI bindings and left the app on in-memory
-# fallback. Uploads are NON-BLOCKING for launch: files persist as base64 in
-# D1 (documents.file_data) behind StorageDriver (src/lib/db.ts). Re-add this
-# block ONLY after R2 is enabled on the account:
-#   [[r2_buckets]]
-#   binding = "BUCKET"
-#   bucket_name = "intellihire-uploads"
+[[d1_databases]]
+binding = "DB_DR_REPLICA"
+database_name = "intellihire-db-dr"
+database_id = "d1-dr-intellihire-v3-secondary"
+migrations_dir = "migrations"
 
-# KV Namespaces (sessions / auth rate limiting)
+# -------------------------------------------------------------
+# Cloudflare KV Edge State & Rate Limiting
+# -------------------------------------------------------------
 [[kv_namespaces]]
-binding = "SESSION_STORE"
-id = "2fb07ec6e55048d4880d24dd9e4b6c8f"
+binding = "SESSION_KV"
+id = "kv-session-cache-prod"
 
-# Workers AI
-[ai]
-binding = "AI"
+[[kv_namespaces]]
+binding = "RATE_LIMIT_KV"
+id = "kv-ratelimit-prod"
 
-# Pages-level secrets / local dev variables live in .dev.vars (gitignored).
+# -------------------------------------------------------------
+# Cloudflare R2 Object Storage & Cold Backup Vault
+# -------------------------------------------------------------
+[[r2_buckets]]
+binding = "RESUME_STORAGE"
+bucket_name = "intellihire-resumes-prod"
+
+[[r2_buckets]]
+binding = "BACKUP_STORAGE"
+bucket_name = "intellihire-backups-vault"
+
+[env]
+INTELLIGENCE_SERVICE_URL = "http://127.0.0.1:8000"
+ENVIRONMENT = "development"
+
+[env.production]
+INTELLIGENCE_SERVICE_URL = "https://intelligence-service.is-a.dev"
+ENVIRONMENT = "production"
+DR_FAILOVER_ACTIVE = "false"
+
+[env.dr]
+INTELLIGENCE_SERVICE_URL = "https://intelligence-service-dr.is-a.dev"
+ENVIRONMENT = "disaster_recovery"
+DR_FAILOVER_ACTIVE = "true"
+
+[build]
+command = "npm run build"
+
+[site]
+bucket = ".next/static"

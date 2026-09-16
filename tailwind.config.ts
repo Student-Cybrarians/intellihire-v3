@@ -43,30 +43,26 @@ const config: Config = {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
-        // IntelliHire brand tokens
-        navy: {
-          900: "#0b0f19",
-          800: "#111827",
-          700: "#1f2937",
-        },
-        electric: {
-          500: "#3b82f6",
-          400: "#60a5fa",
-        },
-        emerald: {
-          500: "#10b981",
-        },
-        purple: {
-          500: "#8b5cf6",
-        },
-        amber: {
-          500: "#f59e0b",
-        },
       },
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
+      },
+      keyframes: {
+        shimmer: {
+          "100%": {
+            transform: "translateX(100%)",
+          },
+        },
+        pulseSlow: {
+          "0%, 100%": { opacity: "1" },
+          "50%": { opacity: "0.5" },
+        },
+      },
+      animation: {
+        shimmer: "shimmer 2s infinite",
+        "pulse-slow": "pulseSlow 3s cubic-bezier(0.4, 0, 0.6, 1) infinite",
       },
     },
   },

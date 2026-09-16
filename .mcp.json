@@ -1,18 +1,18 @@
 {
   "mcpServers": {
-    "github": {
-      "type": "http",
-      "url": "https://api.githubcopilot.com/mcp/",
-      "headers": {
-        "Authorization": "Bearer ${GITHUB_TOKEN}"
-      }
+    "github-server": {
+      "command": "cmd",
+      "args": [
+        "/c",
+        "set GITHUB_PERSONAL_ACCESS_TOKEN=%GITHUB_TOKEN% && C:\\Users\\ADMIN\\Music\\new-mun\\intellihire-v3\\.bin\\github-mcp-server.exe stdio"
+      ]
     },
-    "cloudflare": {
-      "type": "http",
-      "url": "https://mcp.cloudflare.com/mcp",
-      "headers": {
-        "Authorization": "Bearer ${CLOUDFLARE_API_TOKEN}"
-      }
+    "cloudflare-server": {
+      "command": "cmd",
+      "args": [
+        "/c",
+        "npx -y @cloudflare/mcp-server-cloudflare run %CLOUDFLARE_ACCOUNT_ID%"
+      ]
     }
   }
 }
