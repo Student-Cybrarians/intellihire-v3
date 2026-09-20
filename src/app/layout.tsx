@@ -4,6 +4,7 @@ import "./globals.css";
 import { AuthProvider } from "@/lib/auth-context";
 import { Navigation } from "@/components/navigation";
 import { PageTransition } from "@/components/page-transition";
+import { AiAssistantChatbot } from "@/components/ai-assistant-chatbot";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -59,6 +60,9 @@ export default function RootLayout({
               </div>
             </div>
           </footer>
+
+          {/* Global AI Career Assistant Floating Chatbot */}
+          <AiAssistantChatbot />
         </AuthProvider>
       </body>
     </html>

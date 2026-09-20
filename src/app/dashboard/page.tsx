@@ -243,7 +243,7 @@ export default function CandidateDashboard() {
           </Card>
 
           {/* Quick Actions Action Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <Link href="/match" className="w-full">
               <Card className="hover:border-primary/50 transition-all p-4 flex flex-col justify-between h-full bg-slate-900/60 border-white/10 group">
                 <Search className="h-5 w-5 text-primary mb-2 group-hover:scale-110 transition-transform" />
@@ -268,6 +268,15 @@ export default function CandidateDashboard() {
                 <div>
                   <span className="text-xs font-bold text-foreground block">TreeSHAP Explainability</span>
                   <span className="text-[11px] text-muted-foreground mt-0.5 block">Feature Impact Waterfall</span>
+                </div>
+              </Card>
+            </Link>
+            <Link href="/modules/career" className="w-full">
+              <Card className="hover:border-primary/50 transition-all p-4 flex flex-col justify-between h-full bg-slate-900/60 border-white/10 group">
+                <Sparkles className="h-5 w-5 text-amber-400 mb-2 group-hover:scale-110 transition-transform" />
+                <div>
+                  <span className="text-xs font-bold text-foreground block">AI Career Assistant</span>
+                  <span className="text-[11px] text-muted-foreground mt-0.5 block">Educational Guidance</span>
                 </div>
               </Card>
             </Link>

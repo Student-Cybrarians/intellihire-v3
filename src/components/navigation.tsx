@@ -56,6 +56,7 @@ export function Navigation() {
     { name: "Psychometrics", href: "/assessment", icon: Sliders, badge: "Telemetry" },
     { name: "Coding Sandbox", href: "/coding", icon: Code2, badge: "Isolated" },
     { name: "TreeSHAP Scorecard", href: "/feedback", icon: Award, badge: "Explainable" },
+    { name: "AI Assistant", href: "/modules/career", icon: Sparkles, badge: "Educational" },
   ];
 
   const recruiterNav = [
