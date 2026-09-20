@@ -8,6 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
+    "export:pages": "node scripts/prepare_pages_dist.js",
+    "deploy:pages": "npm run build && node scripts/prepare_pages_dist.js && npx wrangler pages deploy out --project-name=intellihire-v3 --branch=master",
     "test:python": "python services/intelligence/tests/run_all_tests.py",
     "test:workflows": "python scripts/verify_system_workflows.py",
     "test:full": "python scripts/verify_full_product.py",
