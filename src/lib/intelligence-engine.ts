@@ -423,25 +423,59 @@ export function executeSafeJavaScriptSandbox(code: string, testCases: TestCase[]
     { text: "> Security boundary: Network disabled | Pure functional AST", color: "text-slate-400", delay: 100 },
   ];
 
+  // 1. Static Security Pre-Filter against Host, Network, and Prototype Injection
+  const forbiddenPatterns = [
+    /\bprocess\b/,
+    /\brequire\b/,
+    /\bimport\b/,
+    /\bfs\b/,
+    /\bchild_process\b/,
+    /\beval\b/,
+    /\bFunction\b/,
+    /\bconstructor\b/,
+    /\bprototype\b/,
+    /\b__proto__\b/,
+    /\blocalStorage\b/,
+    /\bsessionStorage\b/,
+    /\bfetch\b/,
+    /\bXMLHttpRequest\b/,
+    /\bWebSocket\b/,
+    /\bglobalThis\b/,
+    /\bdocument\b/,
+    /\bwindow\b/
+  ];
+
+  for (const pattern of forbiddenPatterns) {
+    if (pattern.test(code)) {
+      const match = code.match(pattern)?.[0] || "forbidden keyword";
+      return {
+        status: "REJECTED",
+        passedCount: 0,
+        totalCount: testCases.length,
+        latencyMs: Number((performance.now() - start).toFixed(1)),
+        memoryMb: 0.0,
+        stdoutLines: [
+          ...stdout,
+          { text: `✗ SECURITY VIOLATION: Access to '${match}' is strictly prohibited inside the sandbox boundary.`, color: "text-rose-400" },
+          { text: "✗ Execution Terminated by Sandbox Security Guard.", color: "text-rose-400" }
+        ],
+        testResults: testCases.map(tc => ({ name: tc.name, passed: false, actual: "SECURITY_VIOLATION", expected: tc.expected }))
+      };
+    }
+  }
+
   const testResults: Array<{ name: string; passed: boolean; actual: any; expected: any }> = [];
   let passedCount = 0;
 
   try {
-    // Wrap code in pure closure with restricted globals
-    const sanitizedCode = code
-      .replace(/\bwindow\b/g, "undefined")
-      .replace(/\bdocument\b/g, "undefined")
-      .replace(/\bfetch\b/g, "undefined")
-      .replace(/\blocalStorage\b/g, "undefined");
-
     const evaluator = new Function(
       "nums",
       `
-      ${sanitizedCode}
+      ${code}
       if (typeof max_sub_array === 'function') return max_sub_array(nums);
       if (typeof maxSubArray === 'function') return maxSubArray(nums);
       if (typeof solution === 'function') return solution(nums);
-      // Fallback: evaluate Kadane logic if function named differently
+      // Fallback Kadane evaluation
       let maxSoFar = nums[0];
       let currMax = nums[0];
       for (let i = 1; i < nums.length; i++) {
@@ -502,9 +536,10 @@ export function executeSafeJavaScriptSandbox(code: string, testCases: TestCase[]
       latencyMs: Number(elapsed.toFixed(1)),
       memoryMb: 16.0,
       stdoutLines: [
+        ...stdout,
         { text: `✗ Runtime / Syntax Error: ${err.message}`, color: "text-rose-400" }
       ],
-      testResults: [],
+      testResults: testCases.map(tc => ({ name: tc.name, passed: false, actual: err.message, expected: tc.expected })),
     };
   }
 }
