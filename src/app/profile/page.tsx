@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
@@ -22,64 +22,24 @@ import {
   Search,
   Check
 } from "lucide-react";
+import { StorageService, CandidateDossier } from "@/lib/storage-service";
+import { ExtractedSkill } from "@/lib/intelligence-engine";
 
 export default function ProfilePage() {
-  const [selectedSkill, setSelectedSkill] = useState<any>({
-    name: "Python",
-    category: "Languages",
-    confidence: 0.99,
-    span: "[480-486]",
-    occurrences: 4,
-    excerpt: "Languages: Python, Go, TypeScript, C++, Rust, SQL",
-  });
+  const [candidate, setCandidate] = useState<CandidateDossier | null>(null);
+  const [selectedSkill, setSelectedSkill] = useState<ExtractedSkill | null>(null);
 
-  const skills = [
-    { name: "Python", category: "Languages", confidence: 0.99, span: "[480-486]", occurrences: 4, excerpt: "Languages: Python, Go, TypeScript, C++, Rust, SQL" },
-    { name: "Go", category: "Languages", confidence: 0.98, span: "[488-490]", occurrences: 2, excerpt: "Languages: Python, Go, TypeScript, C++, Rust, SQL" },
-    { name: "TypeScript", category: "Languages", confidence: 0.97, span: "[492-502]", occurrences: 3, excerpt: "Languages: Python, Go, TypeScript, C++, Rust, SQL" },
-    { name: "PyTorch", category: "AI & ML", confidence: 0.99, span: "[518-525]", occurrences: 3, excerpt: "AI / ML: PyTorch, Hugging Face, Qdrant, Milvus, TreeSHAP, Fairlearn" },
-    { name: "Qdrant", category: "AI & ML", confidence: 0.96, span: "[541-547]", occurrences: 2, excerpt: "AI / ML: PyTorch, Hugging Face, Qdrant, Milvus, TreeSHAP, Fairlearn" },
-    { name: "TreeSHAP", category: "AI & ML", confidence: 0.99, span: "[557-565]", occurrences: 3, excerpt: "Authored automated TreeSHAP surrogate feature attribution engines" },
-    { name: "Fairlearn", category: "AI & ML", confidence: 0.95, span: "[567-576]", occurrences: 2, excerpt: "EEOC 80% Four-Fifths rule fairness auditing pipelines." },
-    { name: "Docker", category: "Infrastructure", confidence: 0.95, span: "[620-626]", occurrences: 2, excerpt: "Infrastructure: Docker, Kubernetes, Cloudflare D1/KV/R2, AWS, Redis" },
-    { name: "Cloudflare D1/KV/R2", category: "Infrastructure", confidence: 0.94, span: "[640-658]", occurrences: 1, excerpt: "Infrastructure: Docker, Kubernetes, Cloudflare D1/KV/R2, AWS, Redis" },
-    { name: "FastAPI", category: "Frameworks", confidence: 0.98, span: "[210-217]", occurrences: 2, excerpt: "high-throughput FastAPI/Go microservices" },
-    { name: "Reciprocal Rank Fusion", category: "Algorithms", confidence: 0.96, span: "[380-408]", occurrences: 2, excerpt: "Deployed hybrid vector search (Dense 384-d embeddings + Okapi BM25 with Reciprocal Rank Fusion k=60)" },
-    { name: "Classical Test Theory", category: "Psychometrics", confidence: 0.93, span: "[180-210]", occurrences: 1, excerpt: "Item response telemetry and psychometric testing pipelines" },
-  ];
-
-  const experience = [
-    {
-      role: "Principal AI Platform Engineer",
-      company: "Anthropic / Scale AI",
-      period: "2021 — Present (3.8 yrs)",
-      highlights: [
-        "Architected isolated multi-tenant execution sandboxes processing 500k+ candidate code executions/day with sub-100ms cold starts.",
-        "Deployed hybrid vector search (Dense 384-d embeddings + Okapi BM25 with Reciprocal Rank Fusion k=60), improving ATS recall by 34%.",
-        "Authored automated TreeSHAP surrogate feature attribution engines and EEOC 80% Four-Fifths rule fairness auditing pipelines."
-      ],
-      verified: true
-    },
-    {
-      role: "Lead Machine Learning Engineer",
-      company: "Uber Technologies",
-      period: "2018 — 2021 (3.2 yrs)",
-      highlights: [
-        "Built real-time matching engine using Go, Python, and Kafka handling 80,000 queries per second.",
-        "Reduced inference latency by 42% through quantization, ONNX Runtime, and TensorRT compilation."
-      ],
-      verified: true
-    },
-    {
-      role: "Senior Software Engineer (Distributed Systems)",
-      company: "Amazon Web Services (AWS)",
-      period: "2016 — 2018 (2.0 yrs)",
-      highlights: [
-        "Designed high-throughput DynamoDB ingestion and Kinesis streams for real-time telemetry processing.",
-      ],
-      verified: true
+  useEffect(() => {
+    const active = StorageService.getActiveCandidate();
+    setCandidate(active);
+    if (active.parsedProfile.skills.length > 0) {
+      setSelectedSkill(active.parsedProfile.skills[0]);
     }
-  ];
+  }, []);
+
+  const profile = candidate?.parsedProfile;
+  const skills = profile?.skills || [];
+  const experience = profile?.experience || [];
 
   return (
     <div className="space-y-8">
@@ -115,33 +75,35 @@ export default function ProfilePage() {
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5">
             <div className="flex items-center gap-4">
               <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-600 flex items-center justify-center text-xl font-black text-white shadow-lg shadow-indigo-500/25">
-                VS
+                {profile?.name ? profile.name.slice(0, 2).toUpperCase() : "VS"}
               </div>
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
-                  <h2 className="text-xl sm:text-2xl font-black text-foreground">Vishnu Sharma</h2>
-                  <Badge variant="default" className="text-[10px] font-mono">LEAD / ARCHITECT</Badge>
+                  <h2 className="text-xl sm:text-2xl font-black text-foreground">{profile?.name}</h2>
+                  <Badge variant="default" className="text-[10px] font-mono uppercase">
+                    {profile?.seniorityTier || "LEAD / ARCHITECT"}
+                  </Badge>
                 </div>
                 <p className="text-xs sm:text-sm text-muted-foreground font-medium">
-                  Principal AI &amp; Distributed Systems Architect
+                  {candidate?.title || "Principal AI & Distributed Systems Architect"}
                 </p>
                 <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground pt-1">
                   <span className="flex items-center gap-1 font-mono text-[11px]">
-                    <Mail className="h-3.5 w-3.5 text-primary" /> vishnu@demo.intellihire.ai
+                    <Mail className="h-3.5 w-3.5 text-primary" /> {profile?.email}
                   </span>
                   <span className="flex items-center gap-1 font-mono text-[11px]">
-                    <MapPin className="h-3.5 w-3.5 text-primary" /> San Francisco, CA
+                    <MapPin className="h-3.5 w-3.5 text-primary" /> {profile?.location}
                   </span>
                   <span className="flex items-center gap-1 font-mono text-emerald-400 font-bold text-[11px]">
-                    <CheckCircle2 className="h-3.5 w-3.5" /> 10.0 Yrs Calibrated Exp
+                    <CheckCircle2 className="h-3.5 w-3.5" /> {profile?.totalYearsExperience.toFixed(1)} Yrs Calibrated Exp
                   </span>
                 </div>
               </div>
             </div>
 
             <div className="flex flex-col items-end gap-1 self-stretch sm:self-center justify-center p-3.5 rounded-xl bg-slate-950/80 border border-white/5 text-right font-mono">
-              <span className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">Seniority Calibration</span>
-              <span className="text-2xl font-black text-primary">0.96 / 1.0</span>
+              <span className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">Skills Verified</span>
+              <span className="text-2xl font-black text-primary">{skills.length} Skills</span>
               <span className="text-[10px] text-emerald-400 font-bold">100% Provenance Coverage</span>
             </div>
           </div>
@@ -165,7 +127,7 @@ export default function ProfilePage() {
             <CardContent className="space-y-4 px-5 pb-5">
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                 {skills.map((s, idx) => {
-                  const isSelected = selectedSkill?.name === s.name;
+                  const isSelected = selectedSkill?.skill === s.skill;
                   return (
                     <button
                       key={idx}
@@ -177,7 +139,7 @@ export default function ProfilePage() {
                       }`}
                     >
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-foreground truncate">{s.name}</span>
+                        <span className="text-xs font-bold text-foreground truncate">{s.skill}</span>
                         <span className="text-[10px] font-mono text-emerald-400 font-bold">
                           {(s.confidence * 100).toFixed(0)}%
                         </span>
@@ -228,7 +190,7 @@ export default function ProfilePage() {
                 Character-Level Provenance Inspector
               </CardTitle>
               <CardDescription className="text-xs">
-                Auditing proof for skill: <strong className="text-foreground">{selectedSkill?.name}</strong>
+                Auditing proof for skill: <strong className="text-foreground">{selectedSkill?.skill}</strong>
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4 px-5 pb-5">
@@ -240,16 +202,18 @@ export default function ProfilePage() {
                 <div className="flex justify-between py-1.5 border-b border-white/5">
                   <span className="text-slate-400">Extraction Confidence:</span>
                   <span className="font-bold text-emerald-400">
-                    {(selectedSkill?.confidence * 100).toFixed(1)}% (Validated)
+                    {selectedSkill ? (selectedSkill.confidence * 100).toFixed(1) : 98.0}% (Validated)
                   </span>
                 </div>
                 <div className="flex justify-between py-1.5 border-b border-white/5">
-                  <span className="text-slate-400">Byte Range Span:</span>
-                  <span className="text-primary font-bold">{selectedSkill?.span}</span>
+                  <span className="text-slate-400">Character Range Span:</span>
+                  <span className="text-primary font-bold">
+                    [{selectedSkill?.span[0] || 0}, {selectedSkill?.span[1] || 0}]
+                  </span>
                 </div>
                 <div className="flex justify-between py-1.5 border-b border-white/5">
                   <span className="text-slate-400">Document Matches:</span>
-                  <span className="text-foreground font-bold">{selectedSkill?.occurrences} occurrences</span>
+                  <span className="text-foreground font-bold">{selectedSkill?.occurrences || 1} occurrences</span>
                 </div>
               </div>
 
@@ -264,7 +228,7 @@ export default function ProfilePage() {
 
               <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-[11px] text-emerald-300 flex items-center gap-2">
                 <ShieldCheck className="h-4 w-4 shrink-0 text-emerald-400" />
-                <span>Zero Hallucination Guarantee: Directly grounded in source AST tokens.</span>
+                <span>Zero Hallucination Guarantee: Grounded in source AST tokens.</span>
               </div>
             </CardContent>
           </Card>
@@ -278,23 +242,15 @@ export default function ProfilePage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 px-5 pb-5 text-xs">
-              <div className="p-3.5 rounded-xl border border-white/5 bg-slate-950/60 space-y-1">
-                <div className="flex justify-between font-bold text-foreground">
-                  <span>Carnegie Mellon University (CMU)</span>
-                  <Badge variant="outline" className="text-[10px] font-mono">2018</Badge>
+              {(profile?.education || []).map((edu, idx) => (
+                <div key={idx} className="p-3.5 rounded-xl border border-white/5 bg-slate-950/60 space-y-1">
+                  <div className="flex justify-between font-bold text-foreground">
+                    <span>{edu.institution}</span>
+                    {edu.year && <Badge variant="outline" className="text-[10px] font-mono">{edu.year}</Badge>}
+                  </div>
+                  <p className="text-slate-300">{edu.degree}</p>
                 </div>
-                <p className="text-slate-300">Master of Science in Artificial Intelligence</p>
-                <span className="text-[10px] text-indigo-400 font-mono block">Specialization: Distributed ML &amp; Fair Systems</span>
-              </div>
-
-              <div className="p-3.5 rounded-xl border border-white/5 bg-slate-950/60 space-y-1">
-                <div className="flex justify-between font-bold text-foreground">
-                  <span>Indian Institute of Technology (IIT)</span>
-                  <Badge variant="outline" className="text-[10px] font-mono">2016</Badge>
-                </div>
-                <p className="text-slate-300">Bachelor of Technology in Computer Science</p>
-                <span className="text-[10px] text-indigo-400 font-mono block">Graduated with Institute Honors</span>
-              </div>
+              ))}
             </CardContent>
           </Card>
         </div>

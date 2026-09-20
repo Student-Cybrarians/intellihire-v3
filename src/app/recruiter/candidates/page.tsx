@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
@@ -21,61 +21,23 @@ import {
   ArrowLeft,
   Binary
 } from "lucide-react";
+import { StorageService, CandidateDossier } from "@/lib/storage-service";
 
 export default function CandidateSearchPage() {
+  const [candidates, setCandidates] = useState<CandidateDossier[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedReq, setSelectedReq] = useState("req-01");
 
-  const candidates = [
-    {
-      id: "cand_vishnu_p01",
-      name: "Vishnu Sharma",
-      title: "Principal AI & Distributed Systems Architect",
-      experience: "10.0 yrs",
-      education: "Carnegie Mellon University (MS AI)",
-      fitScore: 96.4,
-      rrfScore: 0.01639,
-      denseSim: 0.892,
-      bm25Score: 3.84,
-      skillsVerified: 20,
-      skillsList: ["Python", "Go", "PyTorch", "Qdrant", "TreeSHAP", "FastAPI", "Docker", "RRF"],
-      sandboxPassed: true,
-      eeocFairnessFlag: "Clean (Disparate Impact Ratio: 0.94)",
-      badge: "Top Match #1",
-    },
-    {
-      id: "cand_elena_r02",
-      name: "Elena Rostova",
-      title: "Staff Machine Learning Engineer",
-      experience: "8.5 yrs",
-      education: "Stanford University (MS CS)",
-      fitScore: 92.1,
-      rrfScore: 0.01582,
-      denseSim: 0.841,
-      bm25Score: 3.22,
-      skillsVerified: 17,
-      skillsList: ["Python", "PyTorch", "FastAPI", "Docker", "Kubernetes", "Transformers"],
-      sandboxPassed: true,
-      eeocFairnessFlag: "Clean (Disparate Impact Ratio: 0.92)",
-      badge: "Rank #2",
-    },
-    {
-      id: "cand_marcus_v03",
-      name: "Marcus Vance",
-      title: "Lead Distributed Systems Architect",
-      experience: "9.0 yrs",
-      education: "UC Berkeley (BS EECS)",
-      fitScore: 89.5,
-      rrfScore: 0.01490,
-      denseSim: 0.795,
-      bm25Score: 2.95,
-      skillsVerified: 15,
-      skillsList: ["Go", "Python", "Docker", "Cloudflare", "Redis", "Kafka"],
-      sandboxPassed: true,
-      eeocFairnessFlag: "Clean (Disparate Impact Ratio: 0.91)",
-      badge: "Rank #3",
-    },
-  ];
+  useEffect(() => {
+    const pool = StorageService.getAllCandidates();
+    setCandidates(pool);
+  }, []);
+
+  const filtered = candidates.filter((c) =>
+    c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    c.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    c.parsedProfile.skills.some(s => s.skill.toLowerCase().includes(searchTerm.toLowerCase()))
+  );
 
   return (
     <div className="space-y-8">
@@ -143,63 +105,68 @@ export default function CandidateSearchPage() {
 
       {/* Candidate List */}
       <div className="space-y-4">
-        {candidates.map((cand) => (
-          <Card key={cand.id} className="border-white/10 bg-slate-900/70 backdrop-blur-xl hover:border-primary/50 transition-all shadow-xl">
-            <CardContent className="p-6">
-              <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
-                {/* Candidate Info */}
-                <div className="space-y-2 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="text-base font-bold text-foreground">{cand.name}</h3>
-                    <Badge variant="success" className="text-[10px] font-mono">{cand.badge}</Badge>
-                    <Badge variant="outline" className="text-[10px] font-mono">
-                      RRF: {cand.rrfScore.toFixed(5)}
-                    </Badge>
-                    <Badge variant="purple" className="text-[10px] font-mono">
-                      EEOC 0.94
-                    </Badge>
-                  </div>
+        {filtered.map((cand, idx) => {
+          const fitScore = cand.selectedJob?.fitScore || cand.readinessScorecard?.readinessScore || 94.0;
+          const rrfScore = cand.selectedJob?.rrfScore || 0.01639;
 
-                  <p className="text-xs font-semibold text-primary">{cand.title}</p>
-                  <p className="text-xs text-slate-400 font-mono text-[11px]">
-                    {cand.experience} Calibrated Exp • {cand.education}
-                  </p>
-
-                  <div className="flex flex-wrap gap-1.5 pt-2">
-                    {cand.skillsList.map((skill) => (
-                      <Badge key={skill} variant="secondary" className="text-[10px] font-mono bg-slate-950 border-white/5 text-slate-300">
-                        {skill}
+          return (
+            <Card key={cand.id} className="border-white/10 bg-slate-900/70 backdrop-blur-xl hover:border-primary/50 transition-all shadow-xl">
+              <CardContent className="p-6">
+                <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
+                  {/* Candidate Info */}
+                  <div className="space-y-2 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="text-base font-bold text-foreground">{cand.name}</h3>
+                      <Badge variant="success" className="text-[10px] font-mono">Rank #{idx + 1}</Badge>
+                      <Badge variant="outline" className="text-[10px] font-mono">
+                        RRF: {rrfScore.toFixed(5)}
                       </Badge>
-                    ))}
+                      <Badge variant="purple" className="text-[10px] font-mono">
+                        EEOC 0.94
+                      </Badge>
+                    </div>
+
+                    <p className="text-xs font-semibold text-primary">{cand.title}</p>
+                    <p className="text-xs text-slate-400 font-mono text-[11px]">
+                      {cand.parsedProfile.totalYearsExperience.toFixed(1)} Yrs Calibrated Exp • {cand.parsedProfile.education[0]?.degree || "BS Computer Science"}
+                    </p>
+
+                    <div className="flex flex-wrap gap-1.5 pt-2">
+                      {cand.parsedProfile.skills.slice(0, 8).map((s) => (
+                        <Badge key={s.skill} variant="secondary" className="text-[10px] font-mono bg-slate-950 border-white/5 text-slate-300">
+                          {s.skill}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Score Gauges & Breakdown */}
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5 w-full lg:w-auto border-t lg:border-t-0 pt-4 lg:pt-0 border-white/5">
+                    <div className="grid grid-cols-2 gap-3 p-3.5 rounded-xl bg-slate-950/80 border border-white/5 text-center font-mono">
+                      <div>
+                        <span className="text-[10px] text-slate-400 block font-sans">Hybrid Fit</span>
+                        <span className="text-xl font-black text-emerald-400">{fitScore}%</span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 block font-sans">Skills Verified</span>
+                        <span className="text-xl font-black text-foreground">{cand.parsedProfile.skills.length}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col gap-2 w-full sm:w-auto">
+                      <Link href={`/recruiter/candidates/${cand.id}`} className="w-full">
+                        <Button variant="gradient" size="sm" className="w-full gap-2 font-semibold text-xs shadow-md shadow-indigo-500/20">
+                          <span>Inspect Dossier</span>
+                          <ArrowRight className="h-3.5 w-3.5" />
+                        </Button>
+                      </Link>
+                    </div>
                   </div>
                 </div>
-
-                {/* Score Gauges & Breakdown */}
-                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5 w-full lg:w-auto border-t lg:border-t-0 pt-4 lg:pt-0 border-white/5">
-                  <div className="grid grid-cols-2 gap-3 p-3.5 rounded-xl bg-slate-950/80 border border-white/5 text-center font-mono">
-                    <div>
-                      <span className="text-[10px] text-slate-400 block font-sans">Hybrid Fit</span>
-                      <span className="text-xl font-black text-emerald-400">{cand.fitScore}%</span>
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-slate-400 block font-sans">Skills Verified</span>
-                      <span className="text-xl font-black text-foreground">{cand.skillsVerified} / 22</span>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col gap-2 w-full sm:w-auto">
-                    <Link href={`/recruiter/candidates/${cand.id}`} className="w-full">
-                      <Button variant="gradient" size="sm" className="w-full gap-2 font-semibold text-xs shadow-md shadow-indigo-500/20">
-                        <span>Inspect Dossier</span>
-                        <ArrowRight className="h-3.5 w-3.5" />
-                      </Button>
-                    </Link>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
     </div>
   );

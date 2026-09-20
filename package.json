@@ -13,7 +13,8 @@
     "test:python": "python services/intelligence/tests/run_all_tests.py",
     "test:workflows": "python scripts/verify_system_workflows.py",
     "test:full": "python scripts/verify_full_product.py",
-    "test": "npm run typecheck && npm run test:python && npm run test:workflows && npm run test:full"
+    "test:journey": "node scripts/verify_synthetic_candidate_journey.js",
+    "test": "npm run typecheck && npm run test:journey && npm run test:python && npm run test:workflows && npm run test:full"
   },
   "dependencies": {
     "clsx": "^2.1.1",

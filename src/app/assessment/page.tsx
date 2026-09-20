@@ -21,25 +21,16 @@ import {
   Zap,
   Cpu
 } from "lucide-react";
+import { StorageService, CandidateDossier } from "@/lib/storage-service";
 
 export default function AssessmentTelemetryPage() {
+  const [candidate, setCandidate] = useState<CandidateDossier | null>(null);
   const [currentQuestionIdx, setCurrentQuestionIdx] = useState(0);
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
   const [startTime, setStartTime] = useState<number>(Date.now());
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [isSubmitted, setIsSubmitted] = useState(false);
-  const [telemetryLogs, setTelemetryLogs] = useState<any[]>([
-    {
-      itemId: "item_kadane_01",
-      topic: "Dynamic Programming Invariant",
-      selectedOption: 0,
-      isCorrect: true,
-      latencyMs: 1420,
-      timestamp: new Date().toISOString(),
-      cttPValue: "0.80",
-      sampleCount: 26,
-    }
-  ]);
+  const [telemetryLogs, setTelemetryLogs] = useState<any[]>([]);
 
   const questions = [
     {
@@ -54,7 +45,7 @@ export default function AssessmentTelemetryPage() {
       ],
       correctIndex: 0,
       historicalAttempts: 25,
-      historicalCorrect: 20, // p-value = 20 / 25 = 0.80
+      historicalCorrect: 20,
     },
     {
       id: "item_vector_rrf_02",
@@ -68,9 +59,31 @@ export default function AssessmentTelemetryPage() {
       ],
       correctIndex: 0,
       historicalAttempts: 40,
-      historicalCorrect: 32, // p-value = 32 / 40 = 0.80
+      historicalCorrect: 32,
     },
+    {
+      id: "item_fairness_eeoc_03",
+      topic: "Algorithmic Fairness & UGESP 80% Rule",
+      stem: "Under the EEOC Uniform Guidelines on Employee Selection Procedures, what adverse impact ratio threshold constitutes evidence of disparate impact requiring procedural validation?",
+      options: [
+        "Adverse Impact Ratio < 0.80 (Selection rate < 4/5 of the benchmark group)",
+        "Adverse Impact Ratio < 0.50 (Selection rate < 1/2 of the benchmark group)",
+        "Standard deviation > 3.0 on any continuous score",
+        "P-value < 0.01 in Chi-square contingency test",
+      ],
+      correctIndex: 0,
+      historicalAttempts: 30,
+      historicalCorrect: 26,
+    }
   ];
+
+  useEffect(() => {
+    const active = StorageService.getActiveCandidate();
+    setCandidate(active);
+    if (active.assessmentTelemetry && active.assessmentTelemetry.length > 0) {
+      setTelemetryLogs(active.assessmentTelemetry);
+    }
+  }, []);
 
   const currentQ = questions[currentQuestionIdx];
 
@@ -98,8 +111,14 @@ export default function AssessmentTelemetryPage() {
       sampleCount: currentQ.historicalAttempts + 1,
     };
 
-    setTelemetryLogs((prev) => [newLog, ...prev]);
+    const updatedLogs = [newLog, ...telemetryLogs];
+    setTelemetryLogs(updatedLogs);
     setIsSubmitted(true);
+
+    if (candidate) {
+      candidate.assessmentTelemetry = updatedLogs;
+      StorageService.saveActiveCandidate(candidate);
+    }
   };
 
   const handleNextQuestion = () => {
@@ -125,7 +144,7 @@ export default function AssessmentTelemetryPage() {
             Psychometric Assessment &amp; Item Telemetry
           </h1>
           <p className="text-xs sm:text-sm text-muted-foreground mt-1">
-            Real-time response latency logging, CTT difficulty p-values, and strict N=200 sample Item Response Theory gatekeeper.
+            Real-time response latency logging, CTT difficulty p-values, and strict N=200 sample Item Response Theory gatekeeper for <strong className="text-white">{candidate?.name}</strong>.
           </p>
         </div>
 
@@ -146,7 +165,7 @@ export default function AssessmentTelemetryPage() {
           Strict Item Response Theory (IRT) Gatekeeper Active
         </AlertTitle>
         <AlertDescription className="text-xs text-slate-300 mt-1 leading-relaxed">
-          Item difficulty curves are governed by Classical Test Theory (CTT) metrics until sample response volumes reach <strong className="text-white font-mono">N ≥ 200</strong>. 2-Parameter Logistic (2PL) marginal maximum likelihood estimation is gated to prevent uncalibrated variance drift.
+          Item difficulty curves are governed by Classical Test Theory (CTT) metrics until sample response volumes reach <strong className="text-white font-mono">N ≥ 200</strong>. 2-Parameter Logistic (2PL) estimation is gated to prevent uncalibrated variance drift.
         </AlertDescription>
       </Alert>
 
@@ -221,7 +240,7 @@ export default function AssessmentTelemetryPage() {
                   variant="gradient"
                   className="w-full sm:w-auto gap-2 text-xs font-semibold shadow-md shadow-indigo-500/20"
                 >
-                  <span>Next Question</span>
+                  <span>{currentQuestionIdx < questions.length - 1 ? "Next Question" : "Complete Assessment"}</span>
                   <ArrowRight className="h-3.5 w-3.5" />
                 </Button>
               )}
@@ -241,7 +260,7 @@ export default function AssessmentTelemetryPage() {
                 <Badge variant="success" dot className="text-[10px] font-mono">Telemetry Live</Badge>
               </div>
               <CardDescription className="text-xs">
-                Latency, attempt count, and difficulty index per item
+                Logged items: {telemetryLogs.length} events recorded
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3 px-5 pb-5">
@@ -263,12 +282,12 @@ export default function AssessmentTelemetryPage() {
                       <strong className="text-emerald-400">{log.cttPValue}</strong>
                     </div>
                     <div>
-                      <span>Attempts: </span>
-                      <strong className="text-foreground">{log.sampleCount} / 200</strong>
-                    </div>
-                    <div>
                       <span>IRT Status: </span>
                       <strong className="text-amber-400">Gated (&lt; 200)</strong>
+                    </div>
+                    <div>
+                      <span>Timestamp: </span>
+                      <span className="text-slate-400 text-[9px]">{new Date(log.timestamp).toLocaleTimeString()}</span>
                     </div>
                   </div>
                 </div>
@@ -288,9 +307,9 @@ export default function AssessmentTelemetryPage() {
               <div className="space-y-1.5">
                 <div className="flex justify-between text-slate-400">
                   <span>Sample Pool Volume</span>
-                  <span className="text-foreground font-bold">26 / 200 (13.0%)</span>
+                  <span className="text-foreground font-bold">{25 + telemetryLogs.length} / 200 ({(((25 + telemetryLogs.length) / 200) * 100).toFixed(1)}%)</span>
                 </div>
-                <Progress value={13} variant="amber" className="h-2" />
+                <Progress value={((25 + telemetryLogs.length) / 200) * 100} variant="amber" className="h-2" />
               </div>
               <p className="text-[11px] text-slate-400 leading-relaxed font-sans pt-1">
                 At N=200, the psychometric engine unlocks 2-Parameter Logistic (2PL) item characteristic curves (<code className="text-white font-mono">P(θ) = 1 / (1 + e^(-a(θ - b)))</code>).

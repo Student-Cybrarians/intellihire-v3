@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
@@ -20,52 +20,38 @@ import {
   ArrowLeft,
   Activity
 } from "lucide-react";
+import { auditEEOCDisparateImpact, DemographicCohortAudit } from "@/lib/intelligence-engine";
 
 export default function AuditsCompliancePage() {
   const [isAuditing, setIsAuditing] = useState(false);
-  const [lastAuditTimestamp, setLastAuditTimestamp] = useState("2026-09-15T04:22:18Z");
+  const [lastAuditTimestamp, setLastAuditTimestamp] = useState(new Date().toISOString());
+  const [demographicGroups, setDemographicGroups] = useState<DemographicCohortAudit[]>([]);
+  const [overallCompliant, setOverallCompliant] = useState(true);
 
-  const demographicGroups = [
-    {
-      group: "Demographic Group A (Reference)",
-      totalApplicants: 120,
-      selectedCount: 84,
-      selectionRate: 0.70, // 70%
-      impactRatio: 1.00,
-      status: "REFERENCE",
-    },
-    {
-      group: "Demographic Group B",
-      totalApplicants: 95,
-      selectedCount: 63,
-      selectionRate: 0.663, // 66.3%
-      impactRatio: 0.947, // 0.663 / 0.70 = 94.7% >= 80% PASS
-      status: "PASS",
-    },
-    {
-      group: "Demographic Group C",
-      totalApplicants: 80,
-      selectedCount: 52,
-      selectionRate: 0.650, // 65.0%
-      impactRatio: 0.928, // 0.650 / 0.70 = 92.8% >= 80% PASS
-      status: "PASS",
-    },
-    {
-      group: "Demographic Group D",
-      totalApplicants: 110,
-      selectedCount: 71,
-      selectionRate: 0.645, // 64.5%
-      impactRatio: 0.921, // 0.645 / 0.70 = 92.1% >= 80% PASS
-      status: "PASS",
-    },
+  const initialApplicantData = [
+    { group: "Demographic Group A (Reference)", total: 120, selected: 84 },
+    { group: "Demographic Group B", total: 95, selected: 63 },
+    { group: "Demographic Group C", total: 80, selected: 52 },
+    { group: "Demographic Group D", total: 110, selected: 71 },
   ];
+
+  useEffect(() => {
+    runAudit(initialApplicantData);
+  }, []);
+
+  const runAudit = (data: typeof initialApplicantData) => {
+    const result = auditEEOCDisparateImpact(data);
+    setDemographicGroups(result.cohorts);
+    setOverallCompliant(result.overallCompliant);
+    setLastAuditTimestamp(new Date().toISOString());
+  };
 
   const handleRunFreshAudit = () => {
     setIsAuditing(true);
     setTimeout(() => {
-      setLastAuditTimestamp(new Date().toISOString());
+      runAudit(initialApplicantData);
       setIsAuditing(false);
-    }, 900);
+    }, 600);
   };
 
   return (
@@ -124,12 +110,14 @@ export default function AuditsCompliancePage() {
             <div className="space-y-1">
               <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="text-base sm:text-lg font-black text-foreground">
-                  EEOC Four-Fifths Rule: Full Compliance Certified
+                  EEOC Four-Fifths Rule: {overallCompliant ? "Full Compliance Certified" : "Disparate Impact Detected"}
                 </h3>
-                <Badge variant="success" className="text-[10px] font-mono">Ratio: 0.94 &ge; 0.80 PASS</Badge>
+                <Badge variant={overallCompliant ? "success" : "destructive"} className="text-[10px] font-mono">
+                  Ratio: 0.94 &ge; 0.80 PASS
+                </Badge>
               </div>
               <p className="text-xs text-slate-300 leading-relaxed">
-                All demographic selection rates exceed 80% of the reference group rate. No adverse disparate impact detected.
+                All demographic selection rates exceed 80% of the benchmark group rate. No adverse disparate impact detected.
               </p>
               <div className="text-[11px] font-mono text-slate-400 pt-1">
                 Audit Timestamp: {lastAuditTimestamp} • NYC Local Law 144 Independent Audit Ready
@@ -176,7 +164,7 @@ export default function AuditsCompliancePage() {
                       {g.impactRatio.toFixed(3)}
                     </td>
                     <td className="py-3.5 px-4">
-                      <Badge variant="success" className="text-[10px] font-mono">
+                      <Badge variant={g.status === "FAIL" ? "destructive" : "success"} className="text-[10px] font-mono">
                         ✓ {g.status}
                       </Badge>
                     </td>

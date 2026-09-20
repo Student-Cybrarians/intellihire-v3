@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
@@ -21,68 +21,46 @@ import {
   Sparkles,
   Binary
 } from "lucide-react";
+import { StorageService, CandidateDossier, Requisition } from "@/lib/storage-service";
+import { matchCandidateToJobs, JobMatchResult } from "@/lib/intelligence-engine";
 
 export default function HybridMatchPage() {
+  const [candidate, setCandidate] = useState<CandidateDossier | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedJob, setSelectedJob] = useState<any>({
-    id: "req-01",
-    title: "Principal AI & Distributed Systems Architect",
-    department: "AI Infrastructure & Core Systems",
-    location: "San Francisco, CA / Remote",
-    experienceRequired: "8+ years",
-    fitScore: 96.4,
-    rrfScore: 0.01639,
-    denseScore: 0.892,
-    bm25Score: 3.84,
-    matchedSkills: ["Python", "Go", "PyTorch", "Qdrant", "FastAPI", "Docker", "TreeSHAP", "Reciprocal Rank Fusion"],
-    missingSkills: ["Kubeflow", "Triton Inference Server"],
-    description: "Lead our sandboxed execution runtime, 384-d dense + Okapi BM25 hybrid vector search (RRF k=60), and EEOC-compliant algorithmic fairness pipeline across edge nodes.",
-  });
+  const [matchResults, setMatchResults] = useState<JobMatchResult[]>([]);
+  const [selectedJob, setSelectedJob] = useState<JobMatchResult | null>(null);
 
-  const jobs = [
-    {
-      id: "req-01",
-      title: "Principal AI & Distributed Systems Architect",
-      department: "AI Infrastructure & Core Systems",
-      location: "San Francisco, CA / Remote",
-      experienceRequired: "8+ years",
-      fitScore: 96.4,
-      rrfScore: 0.01639,
-      denseScore: 0.892,
-      bm25Score: 3.84,
-      matchedSkills: ["Python", "Go", "PyTorch", "Qdrant", "FastAPI", "Docker", "TreeSHAP", "Reciprocal Rank Fusion"],
-      missingSkills: ["Kubeflow", "Triton Inference Server"],
-      description: "Lead our sandboxed execution runtime, 384-d dense + Okapi BM25 hybrid vector search (RRF k=60), and EEOC-compliant algorithmic fairness pipeline across edge nodes.",
-    },
-    {
-      id: "req-02",
-      title: "Staff Machine Learning Engineer (Core Search)",
-      department: "Information Retrieval & Ranking",
-      location: "New York, NY / Hybrid",
-      experienceRequired: "6+ years",
-      fitScore: 92.1,
-      rrfScore: 0.01582,
-      denseScore: 0.841,
-      bm25Score: 3.22,
-      matchedSkills: ["Python", "PyTorch", "Qdrant", "FastAPI", "Docker", "TypeScript"],
-      missingSkills: ["Elasticsearch", "C++"],
-      description: "Design low-latency neural search pipelines combining 384-d bi-encoder dense vectors with sparse BM25 inverted indexes for candidate-requisition retrieval.",
-    },
-    {
-      id: "req-03",
-      title: "Lead Distributed Systems Engineer",
-      department: "Platform Edge Infrastructure",
-      location: "Remote",
-      experienceRequired: "7+ years",
-      fitScore: 89.5,
-      rrfScore: 0.01490,
-      denseScore: 0.795,
-      bm25Score: 2.95,
-      matchedSkills: ["Go", "Python", "Docker", "Cloudflare D1/KV/R2", "FastAPI"],
-      missingSkills: ["gRPC", "Protobuf", "Raft Consensus"],
-      description: "Scale multi-tenant edge workers, D1 SQL persistent stores, and isolated sandboxed execution runtimes across 275+ global points of presence.",
-    },
-  ];
+  useEffect(() => {
+    const active = StorageService.getActiveCandidate();
+    setCandidate(active);
+    const requisitions = StorageService.getRequisitions();
+
+    const skills = active.parsedProfile.skills.map(s => s.skill);
+    const text = active.rawResumeText;
+
+    const matched = matchCandidateToJobs(skills, text, requisitions);
+    setMatchResults(matched);
+    if (matched.length > 0) {
+      setSelectedJob(matched[0]);
+      active.selectedJob = matched[0];
+      StorageService.saveActiveCandidate(active);
+    }
+  }, []);
+
+  const handleSelectJob = (job: JobMatchResult) => {
+    setSelectedJob(job);
+    if (candidate) {
+      candidate.selectedJob = job;
+      StorageService.saveActiveCandidate(candidate);
+    }
+  };
+
+  const filteredMatches = matchResults.filter(
+    (m) =>
+      m.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      m.department.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      m.matchedSkills.some((s) => s.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
 
   return (
     <div className="space-y-8">
@@ -98,7 +76,7 @@ export default function HybridMatchPage() {
             Hybrid ATS Job Matcher &amp; Vector Scoring
           </h1>
           <p className="text-xs sm:text-sm text-muted-foreground mt-1">
-            Reciprocal Rank Fusion uniting 384-dimensional dense semantic embeddings with Okapi BM25 keyword matching.
+            Reciprocal Rank Fusion uniting 384-dimensional dense semantic embeddings with Okapi BM25 keyword matching for <strong className="text-white">{candidate?.name}</strong>.
           </p>
         </div>
 
@@ -148,12 +126,12 @@ export default function HybridMatchPage() {
           </div>
 
           <div className="space-y-3">
-            {jobs.map((job) => {
-              const isSelected = selectedJob?.id === job.id;
+            {filteredMatches.map((job) => {
+              const isSelected = selectedJob?.jobId === job.jobId;
               return (
                 <div
-                  key={job.id}
-                  onClick={() => setSelectedJob(job)}
+                  key={job.jobId}
+                  onClick={() => handleSelectJob(job)}
                   className={`p-4 rounded-xl border transition-all cursor-pointer space-y-2.5 ${
                     isSelected
                       ? "border-primary bg-primary/15 shadow-lg shadow-indigo-500/10"
@@ -182,102 +160,108 @@ export default function HybridMatchPage() {
 
         {/* Right Column: Selected Job Fit Analysis & Score Decomposition (7 cols) */}
         <div className="lg:col-span-7 space-y-6">
-          <Card className="border-white/10 bg-slate-900/70 backdrop-blur-xl shadow-xl">
-            <CardHeader className="pb-3 pt-5 px-5">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div>
-                  <CardTitle className="text-base font-bold text-foreground">{selectedJob.title}</CardTitle>
-                  <CardDescription className="text-xs mt-0.5 font-medium">
-                    {selectedJob.department} • {selectedJob.location} • Exp: {selectedJob.experienceRequired}
-                  </CardDescription>
-                </div>
-                <div className="text-right">
-                  <span className="text-2xl font-black text-emerald-400 font-mono">{selectedJob.fitScore}%</span>
-                  <span className="block text-[10px] text-slate-400 font-mono uppercase">Hybrid Fit</span>
-                </div>
-              </div>
-            </CardHeader>
-
-            <CardContent className="space-y-6 px-5 pb-5">
-              <p className="text-xs text-slate-300 leading-relaxed bg-slate-950/60 p-3.5 rounded-xl border border-white/5 font-mono text-[11px]">
-                {selectedJob.description}
-              </p>
-
-              {/* Score Decomposition Gauges */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-4 rounded-xl bg-slate-950/80 border border-white/5 font-mono">
-                <div>
-                  <span className="text-[10px] text-slate-400 uppercase tracking-wider block font-bold">Dense Cosine Sim</span>
-                  <div className="flex items-baseline gap-1 mt-1">
-                    <span className="text-lg font-black text-emerald-400">
-                      {selectedJob.denseScore.toFixed(3)}
-                    </span>
-                    <span className="text-[10px] text-slate-400">/ 1.000</span>
+          {selectedJob && (
+            <Card className="border-white/10 bg-slate-900/70 backdrop-blur-xl shadow-xl">
+              <CardHeader className="pb-3 pt-5 px-5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <CardTitle className="text-base font-bold text-foreground">{selectedJob.title}</CardTitle>
+                    <CardDescription className="text-xs mt-0.5 font-medium">
+                      {selectedJob.department} • {selectedJob.location} • Exp: {selectedJob.experienceRequired}
+                    </CardDescription>
                   </div>
-                  <Progress value={selectedJob.denseScore * 100} variant="emerald" className="h-1.5 mt-2" />
-                </div>
-
-                <div>
-                  <span className="text-[10px] text-slate-400 uppercase tracking-wider block font-bold">Okapi BM25 Sparse</span>
-                  <div className="flex items-baseline gap-1 mt-1">
-                    <span className="text-lg font-black text-indigo-400">
-                      {selectedJob.bm25Score.toFixed(2)}
-                    </span>
-                    <span className="text-[10px] text-slate-400">pts</span>
+                  <div className="text-right">
+                    <span className="text-2xl font-black text-emerald-400 font-mono">{selectedJob.fitScore}%</span>
+                    <span className="block text-[10px] text-slate-400 font-mono uppercase">Hybrid Fit</span>
                   </div>
-                  <Progress value={(selectedJob.bm25Score / 5.0) * 100} variant="indigo" className="h-1.5 mt-2" />
                 </div>
+              </CardHeader>
 
-                <div>
-                  <span className="text-[10px] text-slate-400 uppercase tracking-wider block font-bold">Fused RRF Rank</span>
-                  <div className="flex items-baseline gap-1 mt-1">
-                    <span className="text-lg font-black text-primary">
-                      {selectedJob.rrfScore.toFixed(5)}
-                    </span>
+              <CardContent className="space-y-6 px-5 pb-5">
+                <p className="text-xs text-slate-300 leading-relaxed bg-slate-950/60 p-3.5 rounded-xl border border-white/5 font-mono text-[11px]">
+                  {selectedJob.description}
+                </p>
+
+                {/* Score Decomposition Gauges */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-4 rounded-xl bg-slate-950/80 border border-white/5 font-mono">
+                  <div>
+                    <span className="text-[10px] text-slate-400 uppercase tracking-wider block font-bold">Dense Cosine Sim</span>
+                    <div className="flex items-baseline gap-1 mt-1">
+                      <span className="text-lg font-black text-emerald-400">
+                        {selectedJob.denseScore.toFixed(3)}
+                      </span>
+                      <span className="text-[10px] text-slate-400">/ 1.000</span>
+                    </div>
+                    <Progress value={selectedJob.denseScore * 100} variant="emerald" className="h-1.5 mt-2" />
                   </div>
-                  <Progress value={(selectedJob.rrfScore / 0.02) * 100} variant="default" className="h-1.5 mt-2" />
-                </div>
-              </div>
 
-              {/* Matched Skills */}
-              <div className="space-y-2">
-                <div className="flex items-center gap-1.5 text-xs font-bold text-foreground">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-                  <span>Verified Matching Skills ({selectedJob.matchedSkills.length})</span>
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {selectedJob.matchedSkills.map((s: string) => (
-                    <Badge key={s} variant="success" className="text-[11px] font-mono py-0.5">
-                      ✓ {s}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
+                  <div>
+                    <span className="text-[10px] text-slate-400 uppercase tracking-wider block font-bold">Okapi BM25 Sparse</span>
+                    <div className="flex items-baseline gap-1 mt-1">
+                      <span className="text-lg font-black text-indigo-400">
+                        {selectedJob.bm25Score.toFixed(2)}
+                      </span>
+                      <span className="text-[10px] text-slate-400">pts</span>
+                    </div>
+                    <Progress value={(selectedJob.bm25Score / 5.0) * 100} variant="indigo" className="h-1.5 mt-2" />
+                  </div>
 
-              {/* Missing Skills Gap */}
-              <div className="space-y-2">
-                <div className="flex items-center gap-1.5 text-xs font-bold text-foreground">
-                  <XCircle className="h-4 w-4 text-amber-400" />
-                  <span>Growth Opportunity Skill Gaps ({selectedJob.missingSkills.length})</span>
+                  <div>
+                    <span className="text-[10px] text-slate-400 uppercase tracking-wider block font-bold">Fused RRF Rank</span>
+                    <div className="flex items-baseline gap-1 mt-1">
+                      <span className="text-lg font-black text-primary">
+                        {selectedJob.rrfScore.toFixed(5)}
+                      </span>
+                    </div>
+                    <Progress value={(selectedJob.rrfScore / 0.02) * 100} variant="default" className="h-1.5 mt-2" />
+                  </div>
                 </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {selectedJob.missingSkills.map((s: string) => (
-                    <Badge key={s} variant="warning" className="text-[11px] font-mono py-0.5">
-                      + {s}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
 
-              <div className="flex justify-end pt-2 border-t border-white/5">
-                <Link href="/assessment">
-                  <Button size="sm" variant="gradient" className="gap-2 text-xs font-semibold shadow-md shadow-indigo-500/20">
-                    <span>Proceed to Assessment Telemetry</span>
-                    <ArrowRight className="h-3.5 w-3.5" />
-                  </Button>
-                </Link>
-              </div>
-            </CardContent>
-          </Card>
+                {/* Matched Skills */}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-foreground">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                    <span>Verified Matching Skills ({selectedJob.matchedSkills.length})</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {selectedJob.matchedSkills.map((s: string) => (
+                      <Badge key={s} variant="success" className="text-[11px] font-mono py-0.5">
+                        ✓ {s}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Missing Skills Gap */}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-foreground">
+                    <XCircle className="h-4 w-4 text-amber-400" />
+                    <span>Growth Opportunity Skill Gaps ({selectedJob.missingSkills.length})</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {selectedJob.missingSkills.length > 0 ? (
+                      selectedJob.missingSkills.map((s: string) => (
+                        <Badge key={s} variant="warning" className="text-[11px] font-mono py-0.5">
+                          + {s}
+                        </Badge>
+                      ))
+                    ) : (
+                      <span className="text-xs text-emerald-400 font-mono">100% Skill Coverage for this Role!</span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex justify-end pt-2 border-t border-white/5">
+                  <Link href="/assessment">
+                    <Button size="sm" variant="gradient" className="gap-2 text-xs font-semibold shadow-md shadow-indigo-500/20">
+                      <span>Proceed to Assessment Telemetry</span>
+                      <ArrowRight className="h-3.5 w-3.5" />
+                    </Button>
+                  </Link>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
     </div>

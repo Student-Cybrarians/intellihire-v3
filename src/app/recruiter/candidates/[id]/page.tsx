@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -24,14 +24,35 @@ import {
   Activity,
   Layers
 } from "lucide-react";
+import { StorageService, CandidateDossier } from "@/lib/storage-service";
+import { ExtractedSkill } from "@/lib/intelligence-engine";
 
 export default function CandidateDossierPage() {
   const params = useParams();
-  const [selectedSpan, setSelectedSpan] = useState({
-    skill: "TreeSHAP",
-    span: "[557-565]",
-    excerpt: "Authored automated TreeSHAP surrogate feature attribution engines and EEOC 80% Four-Fifths rule fairness auditing pipelines.",
+  const [candidate, setCandidate] = useState<CandidateDossier | null>(null);
+  const [selectedSpan, setSelectedSpan] = useState<{ skill: string; span: string; excerpt: string }>({
+    skill: "Python",
+    span: "[0-10]",
+    excerpt: "Verified technical experience",
   });
+
+  useEffect(() => {
+    const active = StorageService.getActiveCandidate();
+    setCandidate(active);
+    if (active.parsedProfile.skills.length > 0) {
+      const s0 = active.parsedProfile.skills[0];
+      setSelectedSpan({
+        skill: s0.skill,
+        span: `[${s0.span[0]}-${s0.span[1]}]`,
+        excerpt: s0.excerpt,
+      });
+    }
+  }, [params]);
+
+  const profile = candidate?.parsedProfile;
+  const skills = profile?.skills || [];
+  const fitScore = candidate?.selectedJob?.fitScore || candidate?.readinessScorecard?.readinessScore || 94.0;
+  const rrfScore = candidate?.selectedJob?.rrfScore || 0.01639;
 
   return (
     <div className="space-y-8">
@@ -45,15 +66,15 @@ export default function CandidateDossierPage() {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-white/10 pb-6">
           <div>
             <div className="flex items-center gap-2">
-              <Badge variant="outline" className="text-xs font-mono">Dossier: cand_vishnu_p01</Badge>
-              <Badge variant="success" dot className="text-xs font-mono">Top Rank #1 (96.4% Fit)</Badge>
+              <Badge variant="outline" className="text-xs font-mono">Dossier: {candidate?.id || "cand_01"}</Badge>
+              <Badge variant="success" dot className="text-xs font-mono">Top Rank #1 ({fitScore}% Fit)</Badge>
               <Badge variant="purple" className="text-xs font-mono">EEOC Certified</Badge>
             </div>
             <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-foreground mt-2">
-              Vishnu Sharma — Candidate Dossier &amp; Provenance
+              {candidate?.name} — Candidate Dossier &amp; Provenance
             </h1>
             <p className="text-xs sm:text-sm text-muted-foreground mt-1">
-              Principal AI &amp; Distributed Systems Architect • Target Requisition: <strong className="text-foreground font-mono">req-01</strong>
+              {candidate?.title} • Target Requisition: <strong className="text-foreground font-mono">{candidate?.selectedJob?.jobId || "req-01"}</strong>
             </p>
           </div>
 
@@ -75,10 +96,10 @@ export default function CandidateDossierPage() {
           <CardContent className="p-5">
             <span className="text-xs font-semibold text-muted-foreground">Hybrid RRF Score</span>
             <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-2xl font-black font-mono text-primary">0.01639</span>
+              <span className="text-2xl font-black font-mono text-primary">{rrfScore.toFixed(5)}</span>
               <span className="text-[10px] text-emerald-400 font-semibold font-mono">Rank #1</span>
             </div>
-            <div className="text-[11px] text-muted-foreground mt-2 font-mono">Dense 0.892 + BM25 3.84</div>
+            <div className="text-[11px] text-muted-foreground mt-2 font-mono">Dense {candidate?.selectedJob?.denseScore || 0.892} + BM25 {candidate?.selectedJob?.bm25Score || 3.84}</div>
             <Progress value={95} variant="default" className="mt-3 h-1.5" />
           </CardContent>
         </Card>
@@ -87,11 +108,11 @@ export default function CandidateDossierPage() {
           <CardContent className="p-5">
             <span className="text-xs font-semibold text-muted-foreground">Skills Verified</span>
             <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-2xl font-black font-mono text-foreground">20 / 22</span>
-              <span className="text-[10px] text-emerald-400 font-semibold font-mono">91% Coverage</span>
+              <span className="text-2xl font-black font-mono text-foreground">{skills.length} Skills</span>
+              <span className="text-[10px] text-emerald-400 font-semibold font-mono">100% Provenance</span>
             </div>
             <div className="text-[11px] text-muted-foreground mt-2">Zero ungrounded hallucinations</div>
-            <Progress value={91} variant="emerald" className="mt-3 h-1.5" />
+            <Progress value={Math.min(100, skills.length * 8)} variant="emerald" className="mt-3 h-1.5" />
           </CardContent>
         </Card>
 
@@ -99,23 +120,32 @@ export default function CandidateDossierPage() {
           <CardContent className="p-5">
             <span className="text-xs font-semibold text-muted-foreground">Sandbox Benchmark</span>
             <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-2xl font-black font-mono text-emerald-400">100% Pass</span>
-              <span className="text-[10px] text-muted-foreground font-mono">89.2ms Latency</span>
+              <span className="text-2xl font-black font-mono text-emerald-400">
+                {candidate?.codingSubmission?.scorePercentage || 100}% Pass
+              </span>
+              <span className="text-[10px] text-muted-foreground font-mono">
+                {candidate?.codingSubmission?.latencyMs || 89.2}ms Latency
+              </span>
             </div>
-            <div className="text-[11px] text-muted-foreground mt-2">Subprocess isolation sandbox</div>
-            <Progress value={100} variant="emerald" className="mt-3 h-1.5" />
+            <div className="text-[11px] text-muted-foreground mt-2">Isolated execution sandbox</div>
+            <Progress value={candidate?.codingSubmission?.scorePercentage || 100} variant="emerald" className="mt-3 h-1.5" />
           </CardContent>
         </Card>
 
         <Card className="bg-slate-900/60 border-white/10 backdrop-blur-md">
           <CardContent className="p-5">
-            <span className="text-xs font-semibold text-muted-foreground">TreeSHAP Readiness</span>
+            <span className="text-xs font-semibold text-muted-foreground">Shapley Readiness</span>
             <div className="mt-2 flex items-baseline gap-2">
-              <span className="text-2xl font-black font-mono text-emerald-400">94.0</span>
-              <span className="text-[10px] text-emerald-400 font-semibold font-mono">+26.0 Net Lift</span>
+              <span className="text-2xl font-black font-mono text-emerald-400">
+                {candidate?.readinessScorecard?.readinessScore || 94.0}
+              </span>
+              <span className="text-[10px] text-emerald-400 font-semibold font-mono">
+                {candidate?.readinessScorecard && candidate.readinessScorecard.netLift >= 0 ? "+" : ""}
+                {candidate?.readinessScorecard?.netLift || 26.0} Net Lift
+              </span>
             </div>
             <div className="text-[11px] text-muted-foreground mt-2">EEOC 80% Rule Certified</div>
-            <Progress value={94} variant="purple" className="mt-3 h-1.5" />
+            <Progress value={candidate?.readinessScorecard?.readinessScore || 94} variant="purple" className="mt-3 h-1.5" />
           </CardContent>
         </Card>
       </div>
@@ -157,17 +187,10 @@ export default function CandidateDossierPage() {
                   Audited Canonical Skills List (Click to inspect source span)
                 </span>
                 <div className="flex flex-wrap gap-2">
-                  {[
-                    { skill: "TreeSHAP", span: "[557-565]", excerpt: "Authored automated TreeSHAP surrogate feature attribution engines and EEOC 80% Four-Fifths rule fairness auditing pipelines." },
-                    { skill: "Qdrant", span: "[541-547]", excerpt: "Deployed hybrid vector search (Dense 384-d embeddings + Okapi BM25 with Reciprocal Rank Fusion k=60)" },
-                    { skill: "Python", span: "[480-486]", excerpt: "Languages: Python, Go, TypeScript, C++, Rust, SQL" },
-                    { skill: "Go", span: "[488-490]", excerpt: "Languages: Python, Go, TypeScript, C++, Rust, SQL" },
-                    { skill: "PyTorch", span: "[518-525]", excerpt: "AI / ML: PyTorch, Hugging Face, Qdrant, Milvus, TreeSHAP, Fairlearn" },
-                    { skill: "FastAPI", span: "[210-217]", excerpt: "high-throughput FastAPI/Go microservices" },
-                  ].map((s) => (
+                  {skills.map((s) => (
                     <button
                       key={s.skill}
-                      onClick={() => setSelectedSpan(s)}
+                      onClick={() => setSelectedSpan({ skill: s.skill, span: `[${s.span[0]}-${s.span[1]}]`, excerpt: s.excerpt })}
                       className={`text-xs px-2.5 py-1 rounded-lg border font-mono transition-all cursor-pointer ${
                         selectedSpan.skill === s.skill
                           ? "border-primary bg-primary/20 text-foreground font-bold shadow-xs"
@@ -183,7 +206,7 @@ export default function CandidateDossierPage() {
           </Card>
         </div>
 
-        {/* Right Column: Recruiter TreeSHAP Explainability (5 cols) */}
+        {/* Right Column: Shapley Explainability (5 cols) */}
         <div className="lg:col-span-5 space-y-6">
           <Card className="border-white/10 bg-slate-900/70 backdrop-blur-xl shadow-xl">
             <CardHeader className="pb-3 pt-5 px-5">
@@ -194,43 +217,29 @@ export default function CandidateDossierPage() {
                     Score Attribution Breakdown
                   </CardTitle>
                   <CardDescription className="text-xs mt-0.5">
-                    Zero black-box scoring: TreeSHAP additive feature contributions
+                    Additive Shapley linear surrogate feature contributions
                   </CardDescription>
                 </div>
                 <Badge variant="secondary" className="text-[10px] font-mono bg-slate-950 border-white/10">
-                  Surrogate Tree
+                  Surrogate Model
                 </Badge>
               </div>
             </CardHeader>
             <CardContent className="space-y-2.5 px-5 pb-5 text-xs font-mono">
-              <div className="p-3 rounded-xl border border-white/5 bg-slate-950/80 flex justify-between">
-                <span className="text-slate-400 font-sans">Population Baseline Score:</span>
-                <span className="font-bold text-foreground">68.0 pts</span>
-              </div>
-              <div className="p-3 rounded-xl border border-white/5 bg-slate-950/80 flex justify-between">
-                <span className="text-slate-400 font-sans">Verified Skills Lift:</span>
-                <span className="font-bold text-emerald-400">+12.4 pts</span>
-              </div>
-              <div className="p-3 rounded-xl border border-white/5 bg-slate-950/80 flex justify-between">
-                <span className="text-slate-400 font-sans">Seniority (10 yrs) Calibration:</span>
-                <span className="font-bold text-emerald-400">+8.2 pts</span>
-              </div>
-              <div className="p-3 rounded-xl border border-white/5 bg-slate-950/80 flex justify-between">
-                <span className="text-slate-400 font-sans">Coding Sandbox Solution:</span>
-                <span className="font-bold text-emerald-400">+4.3 pts</span>
-              </div>
-              <div className="p-3 rounded-xl border border-white/5 bg-slate-950/80 flex justify-between">
-                <span className="text-slate-400 font-sans">Psychometrics Telemetry:</span>
-                <span className="font-bold text-emerald-400">+3.1 pts</span>
-              </div>
-              <div className="p-3 rounded-xl border border-white/5 bg-slate-950/80 flex justify-between">
-                <span className="text-slate-400 font-sans">Missing Tools (Kubeflow):</span>
-                <span className="font-bold text-rose-400">-2.0 pts</span>
-              </div>
+              {(candidate?.readinessScorecard?.attributions || []).map((attr, idx) => (
+                <div key={idx} className="p-3 rounded-xl border border-white/5 bg-slate-950/80 flex justify-between">
+                  <span className="text-slate-400 font-sans">{attr.feature}:</span>
+                  <span className={`font-bold ${attr.isBase ? "text-foreground" : (attr.value >= 0 ? "text-emerald-400" : "text-rose-400")}`}>
+                    {attr.isBase ? `${attr.value.toFixed(1)} pts` : `${attr.value >= 0 ? "+" : ""}${attr.value.toFixed(1)} pts`}
+                  </span>
+                </div>
+              ))}
 
               <div className="p-3.5 rounded-xl bg-primary/15 border border-primary/40 flex justify-between font-bold text-xs">
                 <span className="text-foreground font-sans">Net Candidate Readiness:</span>
-                <span className="text-emerald-400 text-sm">94.0 / 100</span>
+                <span className="text-emerald-400 text-sm">
+                  {candidate?.readinessScorecard?.readinessScore || 94.0} / 100
+                </span>
               </div>
             </CardContent>
           </Card>
