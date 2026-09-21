@@ -67,4 +67,13 @@ class Settings:
     MIN_RESPONSES_FOR_CALIBRATION: int = 200
     FAIRNESS_FOUR_FIFTHS_THRESHOLD: float = 0.80
 
+    # NVIDIA NIM AI Model Service (Meta Muse-Glimmer / Nemotron)
+    NVIDIA_API_KEY: str = os.getenv(
+        "NVIDIA_API_KEY",
+        "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"
+    )
+    NVIDIA_NIM_HOSTED_URL: str = os.getenv("NVIDIA_NIM_HOSTED_URL", "https://integrate.api.nvidia.com/v1")
+    NVIDIA_NIM_LOCAL_URL: str = os.getenv("NVIDIA_NIM_LOCAL_URL", "http://localhost:8000/v1")
+    NVIDIA_NIM_MODEL: str = os.getenv("NVIDIA_NIM_MODEL", "meta/muse-glimmer-30b")
+
 settings = Settings()
