@@ -4,6 +4,7 @@
  */
 
 import { StorageService } from "./storage-service";
+import { nvidiaNimService } from "./nvidia-nim-service";
 
 export interface AssistantMessage {
   id: string;
@@ -201,7 +202,40 @@ $$\\text{Adverse Impact Ratio} = \\frac{\\text{Selection Rate of Protected Group
 * **Compliant**: Ratio $\\ge 0.80$ (80%)
 * **Adverse Impact**: Ratio $< 0.80$ (Triggers mandatory validation)`;
   } else {
-    responseText = `# Career Intelligence Assistant: ${userQuery}
+    // Attempt dynamic NVIDIA NIM completion with candidate-grounded system context
+    try {
+      const nimPrompt = [
+        {
+          role: "system" as const,
+          content: `You are the IntelliHire v3 AI Career & Placement Intelligence Assistant powered by NVIDIA NIM (Meta Muse-Glimmer).
+Active Candidate Context:
+- Name: ${candidate.name}
+- Verified Skills: ${skillsList.join(", ")}
+- Calibrated Experience: ${profile.totalYearsExperience.toFixed(1)} Years (${profile.seniorityTier})
+- Target Requisition: ${selectedJob?.title || "Principal AI Architect"} (${selectedJob?.fitScore || 96.4}% Fit)
+- Missing Tools to Acquire: ${(selectedJob?.missingSkills || ["Kubeflow", "Triton"]).join(", ")}
+- Readiness Score: ${scorecard?.readinessScore || 94.0} / 100
+
+Answer technical, career, algorithmic, and architectural questions with precision, actionable feedback, and clean Markdown formatting.`
+        },
+        {
+          role: "user" as const,
+          content: userQuery
+        }
+      ];
+
+      const nimResponse = await nvidiaNimService.chatCompletion(nimPrompt, {
+        max_tokens: 768,
+        temperature: 0.3
+      });
+
+      if (nimResponse && nimResponse.length > 20) {
+        responseText = nimResponse;
+      } else {
+        throw new Error("Empty NIM response");
+      }
+    } catch {
+      responseText = `# Career Intelligence Assistant: ${userQuery}
 
 Thank you for your question regarding **${userQuery}**.
 
@@ -214,6 +248,7 @@ Thank you for your question regarding **${userQuery}**.
 1. Review your character-span provenance in **Structured Profile**.
 2. Run live test benchmarks in **Coding Sandbox**.
 3. Inspect score attributions in **Shapley Scorecard**.`;
+    }
   }
 
   // Smooth streaming simulation
