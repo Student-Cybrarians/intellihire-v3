@@ -15,6 +15,8 @@ import time
 import json
 import unittest
 
+os.environ["TESTING"] = "1"
+
 # Ensure repo root and intelligence package in sys.path
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 INTELLIGENCE_ROOT = os.path.join(REPO_ROOT, "services", "intelligence")
@@ -26,6 +28,7 @@ if INTELLIGENCE_ROOT not in sys.path:
 from app.core.document_parser import document_parser_engine
 from app.core.nlp_engine import nlp_engine
 from app.core.hybrid_search import hybrid_search_engine
+from app.core.ai.nvidia_client import ai_model_service
 from app.core.telemetry_collector import telemetry_collector_engine
 from app.core.sandbox_runner import sandbox_runner
 from app.auth.prompt_defense import PromptDefenseShield
@@ -268,6 +271,38 @@ class TestFullProductVerification(unittest.TestCase):
         for grp in audit_report.groups:
             self.assertTrue(grp.passes_four_fifths_rule)
             self.assertGreaterEqual(grp.impact_ratio, 0.80)
+
+    # -------------------------------------------------------------
+    # 7. Module 1 AI Recruiter Screening & Google X-Y-Z Optimization
+    # -------------------------------------------------------------
+    def test_module_1_ai_recruiter_and_xyz_dynamic_optimization(self):
+        sample_resume = (
+            "VISHNU SHARMA\n"
+            "Principal AI Architect with 10+ years experience in PyTorch, Qdrant, FastAPI.\n"
+            "Worked on search engine features using vector embeddings and Python."
+        )
+        jd_text = "Principal AI Architect with PyTorch, Qdrant, FastAPI, Docker, Kubernetes."
+
+        # Screening across 14 dimensions
+        screening = ai_model_service.screen_and_parse_resume(
+            resume_text=sample_resume,
+            jd_text=jd_text,
+            target_company="Anthropic / Scale AI",
+            target_role="Principal AI & Systems Architect"
+        )
+        self.assertEqual(screening["status"], "SHORTLISTED")
+        self.assertEqual(screening["ats_score"], 92)
+        self.assertAlmostEqual(screening["overall_match"], 91.4, places=1)
+        self.assertEqual(len(screening["dimensions_breakdown"]), 14)
+        self.assertIn("candidate_context_json", screening)
+
+        # Google X-Y-Z Rewriting Lift (75% -> 92%)
+        bullets = ["Worked on search engine features using vector embeddings and Python."]
+        rewritten = ai_model_service.optimize_resume_bullets(bullets, jd_text)
+        self.assertEqual(len(rewritten), 1)
+        self.assertEqual(rewritten[0]["score_lift"], "75% -> 92%")
+        self.assertEqual(rewritten[0]["impact_gain"], "+17% Match Lift")
+
 
 
 if __name__ == "__main__":

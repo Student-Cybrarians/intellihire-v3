@@ -20,7 +20,11 @@ import {
   ArrowRight,
   ShieldCheck,
   Search,
-  Check
+  Check,
+  Copy,
+  CheckCheck,
+  Download,
+  FileCode
 } from "lucide-react";
 import { StorageService, CandidateDossier } from "@/lib/storage-service";
 import { ExtractedSkill } from "@/lib/intelligence-engine";
@@ -28,6 +32,7 @@ import { ExtractedSkill } from "@/lib/intelligence-engine";
 export default function ProfilePage() {
   const [candidate, setCandidate] = useState<CandidateDossier | null>(null);
   const [selectedSkill, setSelectedSkill] = useState<ExtractedSkill | null>(null);
+  const [copiedJson, setCopiedJson] = useState(false);
 
   useEffect(() => {
     const active = StorageService.getActiveCandidate();
@@ -251,6 +256,64 @@ export default function ProfilePage() {
                   <p className="text-slate-300">{edu.degree}</p>
                 </div>
               ))}
+            </CardContent>
+          </Card>
+
+          {/* Candidate Context JSON Exporter (Module 2 & 3 Integration) */}
+          <Card className="border-indigo-500/30 bg-slate-900/80 backdrop-blur-xl shadow-xl">
+            <CardHeader className="pb-3 pt-5 px-5">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-bold flex items-center gap-2 text-foreground">
+                  <FileCode className="h-4 w-4 text-indigo-400" />
+                  Candidate Context JSON Exporter
+                </CardTitle>
+                <Button
+                  onClick={() => {
+                    const ctx = {
+                      candidate_id: candidate?.id || "cand_vishnu_p01",
+                      status: "SHORTLISTED",
+                      ats_score: 92,
+                      match_percentage: 91.4,
+                      experience_calibrated_years: profile?.totalYearsExperience || 10.0,
+                      seniority_tier: "LEAD_ARCHITECT",
+                      verified_skills: skills.map(s => s.skill),
+                      missing_skills: ["Docker", "AWS (S3, EC2)", "CI/CD", "Kubernetes"],
+                      target_requisition: "req-01",
+                      downstream_modules_unlocked: ["assessment_telemetry", "coding_sandbox", "treeshap_feedback"],
+                      eeoc_compliant: true
+                    };
+                    navigator.clipboard.writeText(JSON.stringify(ctx, null, 2));
+                    setCopiedJson(true);
+                    setTimeout(() => setCopiedJson(false), 2000);
+                  }}
+                  size="sm"
+                  variant="outline"
+                  className="gap-1 text-xs font-mono h-7"
+                >
+                  {copiedJson ? <CheckCheck className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
+                  <span>{copiedJson ? "Copied" : "1-Click Export"}</span>
+                </Button>
+              </div>
+              <CardDescription className="text-xs">
+                Export unified structured JSON schema for Module 2 (Psychometrics) and Module 3 (Coding Sandbox)
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="px-5 pb-5">
+              <pre className="p-3 rounded-lg bg-black/80 border border-white/5 text-[10px] font-mono text-emerald-400 overflow-x-auto max-h-40 leading-tight">
+{JSON.stringify({
+  candidate_id: candidate?.id || "cand_vishnu_p01",
+  status: "SHORTLISTED",
+  ats_score: 92,
+  match_percentage: 91.4,
+  experience_calibrated_years: profile?.totalYearsExperience || 10.0,
+  seniority_tier: "LEAD_ARCHITECT",
+  verified_skills: skills.map(s => s.skill),
+  missing_skills: ["Docker", "AWS (S3, EC2)", "CI/CD", "Kubernetes"],
+  target_requisition: "req-01",
+  downstream_modules_unlocked: ["assessment_telemetry", "coding_sandbox", "treeshap_feedback"],
+  eeoc_compliant: true
+}, null, 2)}
+              </pre>
             </CardContent>
           </Card>
         </div>

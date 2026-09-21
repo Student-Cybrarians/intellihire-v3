@@ -21,6 +21,7 @@ if INTELLIGENCE_DIR not in sys.path:
 from app.core.document_parser import document_parser_engine
 from app.core.nlp_engine import nlp_engine
 from app.core.hybrid_search import hybrid_search_engine
+from app.core.ai.nvidia_client import ai_model_service
 from app.core.telemetry_collector import telemetry_collector_engine
 from app.core.sandbox_runner import sandbox_runner
 from app.core.explainability import explainability_engine
@@ -234,6 +235,31 @@ if __name__ == '__main__':
     print(f"    -> Framework: {fairness_resp.regulatory_framework}")
     for g in fairness_resp.groups:
         print(f"       * Group '{g.group_name}': Selection Rate={g.selection_rate:.1%}, Impact Ratio={g.impact_ratio:.1%} (Passes 80% Rule: {g.passes_four_fifths_rule})")
+
+    # -------------------------------------------------------------
+    # STEP 8: MODULE 1 AI RECRUITER ATS ENGINE & GOOGLE X-Y-Z REWRITE
+    # -------------------------------------------------------------
+    print("\n[+] STEP 8: Module 1 AI Recruiter Screening & Google X-Y-Z Dynamic Optimization...")
+    m1_result = ai_model_service.screen_and_parse_resume(
+        resume_text=sample_resume,
+        jd_text="Principal AI Architect with 8+ years experience in PyTorch, Qdrant, FastAPI, Docker, and TreeSHAP.",
+        target_company="Anthropic / Scale AI",
+        target_role="Principal AI & Systems Architect"
+    )
+    assert m1_result["status"] == "SHORTLISTED", "Candidate was not shortlisted by AI Recruiter!"
+    assert m1_result["ats_score"] >= 90, "ATS score below threshold!"
+    assert len(m1_result["dimensions_breakdown"]) == 14, "14-dimension breakdown incomplete!"
+
+    # Verify Google X-Y-Z bullet rewrite
+    bullets = ["Worked on search engine features using vector embeddings and Python."]
+    rewritten = ai_model_service.optimize_resume_bullets(bullets, "Target: Qdrant, RRF, PyTorch")
+    assert len(rewritten) >= 1 and "optimized" in rewritten[0], "Bullet rewrite failed!"
+
+    print(f"    -> ATS Score: {m1_result['ats_score']}/100 ({m1_result['overall_match']}% Match)")
+    print(f"    -> Decision Badge: SHORTLISTED [PASS]")
+    print(f"    -> Recruiter Feedback: {m1_result['recruiter_feedback'][:75]}...")
+    print(f"    -> Google X-Y-Z Lift: {rewritten[0]['score_lift']} ({rewritten[0]['impact_gain']})")
+    print(f"    -> Downstream Context JSON Unlocked: {m1_result['candidate_context_json']['downstream_modules_unlocked']}")
 
     print("\n" + "=" * 75)
     print(">>> COMPLETE SYSTEM WORKFLOW VERIFICATION PASSED WITH 100% GREEN <<<")
