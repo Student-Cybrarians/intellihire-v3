@@ -1,3 +1,0 @@
-"""
-IntelliHire Intelligence App Package.
-"""
